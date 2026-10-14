@@ -1,0 +1,203 @@
+// Plataforma de obtención documental para trámites inmobiliarios (Chile).
+// SQLite en desarrollo. Para producción cambiar provider a "postgresql".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserType {
+  PERSONA
+  EMPRESA
+}
+
+enum ProcedureCode {
+  INFORME_TITULO
+  SANEAMIENTO
+}
+
+enum RequestStatus {
+  BORRADOR // creada, aún sin pagar
+  PENDIENTE_PAGO // checkout iniciado
+  PAGADA // pago confirmado, en cola para obtención
+  EN_PROCESO // agente/scrapers obteniendo documentos (fase 2)
+  GENERANDO_INFORME // documentos listos, IA redactando informe (fase 3)
+  COMPLETADA
+  CANCELADA
+}
+
+enum ItemStatus {
+  PENDIENTE
+  OBTENIENDO
+  OBTENIDO
+  FALLIDO
+}
+
+enum PaymentStatus {
+  CREADO
+  APROBADO
+  RECHAZADO
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  userType     UserType?
+  onboarded    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  person   PersonProfile?
+  company  CompanyProfile?
+  requests Request[]
+}
+
+model PersonProfile {
+  id       String @id @default(cuid())
+  userId   String @unique
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nombre   String
+  apellido String
+  rut      String
+  telefono String
+}
+
+model CompanyProfile {
+  id                  String @id @default(cuid())
+  userId              String @unique
+  user                User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razonSocial         String
+  rutEmpresa          String
+  giro                String
+  direccion           String
+  representanteNombre String
+  representanteRut    String
+  telefono            String
+}
+
+model Region {
+  id      Int      @id // número oficial de región (1..16)
+  code    String   @unique // "XIII", "V", ...
+  name    String
+  order   Int // orden geográfico norte -> sur
+  comunas Comuna[]
+}
+
+model Comuna {
+  id       Int    @id @default(autoincrement())
+  name     String
+  regionId Int
+  region   Region @relation(fields: [regionId], references: [id])
+
+  requirements ProcedureRequirement[]
+  requests     Request[]
+
+  @@unique([regionId, name])
+}
+
+model Procedure {
+  id          String        @id @default(cuid())
+  code        ProcedureCode @unique
+  name        String
+  description String
+  reportName  String // "Borrador de informe de títulos" / "Informe de saneamiento"
+  reportPrice Int // CLP
+
+  requirements ProcedureRequirement[]
+  requests     Request[]
+}
+
+// Catálogo de documentos obtenibles
+model DocumentType {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String
+  issuer      String // CBR, SII, TGR, Municipalidad, Registro Civil...
+  price       Int // CLP; 0 = gratuito. Precio de referencia (costo + fee)
+  active      Boolean @default(true)
+
+  requirements ProcedureRequirement[]
+  items        RequestItem[]
+}
+
+// Qué documentos requiere un trámite. regionId/comunaId nulos = aplica a todo Chile.
+// Una fila con comunaId permite agregar documentos específicos de una comuna,
+// y `excluded` permite quitar un documento genérico para una comuna/región.
+model ProcedureRequirement {
+  id             String       @id @default(cuid())
+  procedureId    String
+  procedure      Procedure    @relation(fields: [procedureId], references: [id])
+  documentTypeId String
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id])
+  regionId       Int?
+  comunaId       Int?
+  comuna         Comuna?      @relation(fields: [comunaId], references: [id])
+  excluded       Boolean      @default(false)
+  sortOrder      Int          @default(0)
+}
+
+model Request {
+  id            String        @id @default(cuid())
+  number        Int           @unique // correlativo legible (#1001)
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  procedureId   String
+  procedure     Procedure     @relation(fields: [procedureId], references: [id])
+  comunaId      Int
+  comuna        Comuna        @relation(fields: [comunaId], references: [id])
+  rol           String // rol de avalúo SII, ej "123-45"
+  includeReport Boolean       @default(false)
+  documentsTotal Int          @default(0)
+  reportTotal   Int           @default(0)
+  total         Int           @default(0)
+  status        RequestStatus @default(BORRADOR)
+  folderPath    String? // carpeta donde se guardan los documentos (fase 2)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items    RequestItem[]
+  payments Payment[]
+  events   RequestEvent[]
+}
+
+model RequestItem {
+  id             String       @id @default(cuid())
+  requestId      String
+  request        Request      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  documentTypeId String
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id])
+  selected       Boolean      @default(true)
+  price          Int // precio congelado al crear la solicitud
+  sortOrder      Int          @default(0)
+  status         ItemStatus   @default(PENDIENTE)
+  filePath       String?
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  requestId  String
+  request    Request       @relation(fields: [requestId], references: [id])
+  provider   String // mock | flow | webpay
+  externalId String?
+  amount     Int
+  status     PaymentStatus @default(CREADO)
+  cardLast4  String? // nunca se guarda el número completo
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+// Bitácora de la solicitud (lo que ve el cliente y auditoría interna)
+model RequestEvent {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  createdAt DateTime @default(now())
+}
