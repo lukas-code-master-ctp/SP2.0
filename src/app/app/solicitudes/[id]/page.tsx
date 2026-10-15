@@ -4,6 +4,17 @@ import { getOwnedRequest } from "@/lib/requests";
 import { formatCLP } from "@/lib/money";
 import { ITEM_STATUS_LABEL, REQUEST_STATUS_LABEL } from "@/lib/labels";
 import { Steps } from "@/components/Steps";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { SubmitButton } from "@/components/ui";
+import { retryFulfillment } from "@/app/actions/fulfillment";
+
+const ITEM_STATUS_STYLE = {
+  PENDIENTE: "bg-slate-100 text-slate-600",
+  OBTENIENDO: "bg-amber-100 text-amber-800",
+  OBTENIDO: "bg-emerald-100 text-emerald-800",
+  REQUIERE_ACCION: "bg-sky-100 text-sky-800",
+  FALLIDO: "bg-amber-100 text-amber-800",
+} as const;
 
 export default async function RequestDetail({
   params,
@@ -17,9 +28,13 @@ export default async function RequestDetail({
   const r = await getOwnedRequest(id, user.id);
   const selectedItems = r.items.filter((i) => i.selected);
   const paidOrLater = r.status !== "BORRADOR" && r.status !== "PENDIENTE_PAGO" && r.status !== "CANCELADA";
+  const fetching = r.status === "PAGADA" || r.status === "EN_PROCESO";
+  const working = fetching && selectedItems.some((i) => ["PENDIENTE", "OBTENIENDO", "FALLIDO"].includes(i.status));
+  const canRetry = fetching && !working && selectedItems.some((i) => i.status !== "OBTENIDO");
 
   return (
     <>
+      {working && <AutoRefresh />}
       {confirmada && paidOrLater && (
         <>
           <Steps current={3} />
@@ -54,9 +69,20 @@ export default async function RequestDetail({
           <h3 className="border-b border-slate-200 px-6 py-4 font-semibold">Documentos</h3>
           <ul className="divide-y divide-slate-100">
             {selectedItems.map((i) => (
-              <li key={i.id} className="flex items-center justify-between gap-4 px-6 py-3 text-sm">
-                <span>{i.documentType.name}</span>
-                <span className="whitespace-nowrap text-slate-500">{ITEM_STATUS_LABEL[i.status]}</span>
+              <li key={i.id} className="flex items-start justify-between gap-4 px-6 py-3 text-sm">
+                <div>
+                  {i.filePath ? (
+                    <a href={`/app/solicitudes/${r.id}/archivos/${i.id}`} target="_blank" className="font-medium text-brand-700 hover:underline">
+                      {i.documentType.name}
+                    </a>
+                  ) : (
+                    <span>{i.documentType.name}</span>
+                  )}
+                  {i.detail && <p className="mt-0.5 text-xs text-slate-500">{i.detail}</p>}
+                </div>
+                <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${ITEM_STATUS_STYLE[i.status]}`}>
+                  {ITEM_STATUS_LABEL[i.status]}
+                </span>
               </li>
             ))}
             {r.includeReport && (
@@ -66,6 +92,12 @@ export default async function RequestDetail({
               </li>
             )}
           </ul>
+          {canRetry && (
+            <form action={retryFulfillment} className="border-t border-slate-200 px-6 py-4">
+              <input type="hidden" name="requestId" value={r.id} />
+              <SubmitButton>Reintentar documentos pendientes</SubmitButton>
+            </form>
+          )}
         </section>
 
         <aside className="space-y-6">

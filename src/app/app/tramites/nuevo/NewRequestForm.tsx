@@ -76,6 +76,19 @@ export function NewRequestForm({ procedures, regions }: Props) {
         />
       </section>
 
+      <section className="card grid gap-4 sm:grid-cols-3">
+        <div className="sm:col-span-3">
+          <h2 className="font-semibold">Inscripción en el Conservador (opcional)</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Si tienes la foja, número y año de la inscripción, los documentos del Conservador salen más rápido. Si no,
+            los buscamos nosotros a partir del rol.
+          </p>
+        </div>
+        <Field label="Foja" name="foja" placeholder="12345" error={e?.foja} />
+        <Field label="Número" name="inscripcionNumero" placeholder="6789" error={e?.inscripcionNumero} />
+        <Field label="Año" name="inscripcionAnio" placeholder="2015" inputMode="numeric" error={e?.inscripcionAnio} />
+      </section>
+
       <div className="flex justify-end">
         <SubmitButton>Ver documentos requeridos →</SubmitButton>
       </div>
