@@ -30,7 +30,8 @@ export default async function RequestDetail({
   const paidOrLater = r.status !== "BORRADOR" && r.status !== "PENDIENTE_PAGO" && r.status !== "CANCELADA";
   const fetching = r.status === "PAGADA" || r.status === "EN_PROCESO";
   const working = fetching && selectedItems.some((i) => ["PENDIENTE", "OBTENIENDO", "FALLIDO"].includes(i.status));
-  const canRetry = fetching && !working && selectedItems.some((i) => i.status !== "OBTENIDO");
+  const canRetry =
+    fetching && !selectedItems.some((i) => i.status === "OBTENIENDO") && selectedItems.some((i) => i.status !== "OBTENIDO");
 
   return (
     <>
@@ -95,7 +96,7 @@ export default async function RequestDetail({
           {canRetry && (
             <form action={retryFulfillment} className="border-t border-slate-200 px-6 py-4">
               <input type="hidden" name="requestId" value={r.id} />
-              <SubmitButton>Reintentar documentos pendientes</SubmitButton>
+              <SubmitButton>Obtener documentos pendientes</SubmitButton>
             </form>
           )}
         </section>
