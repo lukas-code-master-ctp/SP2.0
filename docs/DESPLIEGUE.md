@@ -14,17 +14,13 @@ La web nunca ejecuta conectores en producción (`WORKER_INLINE=false`): solo cre
 2. *Storage* → crear bucket **privado** `documentos`.
 3. *Project Settings → Database → Connection string*: copiar la URL con pooler (puerto 6543, agregar `?pgbouncer=true`) como `DATABASE_URL` y la de puerto 5432 como `DIRECT_URL`.
 4. `SUPABASE_URL` es `https://<ref>.supabase.co`. *Project Settings → API Keys → Secret keys*: copiar la clave `sb_secret_...` como `SUPABASE_SERVICE_ROLE_KEY` (también sirve la `service_role` antigua).
-5. Desde tu PC, con esas variables en `.env`:
-   ```
-   npm run db:migrate
-   npm run db:seed
-   ```
+5. Las tablas y el seed se crean solos en el primer despliegue de producción en Vercel. Para hacerlo desde tu PC: `npm run db:migrate` y `npm run db:seed` con esas variables en `.env`.
 
 ## 2. Vercel
 
 1. *Add New → Project* → importar el repo de GitHub.
 2. Variables de entorno: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET` (aleatorio, 32+ caracteres), `APP_URL` (la URL de Vercel o tu dominio), `PAYMENT_PROVIDER=mock`, `EMAIL_PROVIDER=console`, `WORKER_INLINE=false`, `STORAGE_DRIVER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET=documentos`.
-3. Deploy. Las migraciones se aplican a mano con `npm run db:migrate` antes de desplegar un cambio de esquema.
+3. Deploy. En producción, `npm run vercel-build` aplica las migraciones y el seed (idempotente) antes de `next build`; las vistas previas solo construyen.
 
 ## 3. Motor en Cloud Run (Santiago)
 
