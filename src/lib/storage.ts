@@ -50,7 +50,8 @@ const supabaseDriver = (): Driver => {
   const bucket = process.env.SUPABASE_BUCKET ?? "documentos";
   if (!url || !key) throw new Error("Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
   const objectUrl = (relative: string) => `${url}/storage/v1/object/${bucket}/${relative.split("/").map(encodeURIComponent).join("/")}`;
-  const headers = { Authorization: `Bearer ${key}`, apikey: key };
+  // Las claves nuevas (sb_secret_...) no son JWT y van solo en "apikey"; la service_role antigua (JWT) va en ambos.
+  const headers: Record<string, string> = key.startsWith("sb_") ? { apikey: key } : { Authorization: `Bearer ${key}`, apikey: key };
   return {
     async write(relative, content) {
       const res = await fetch(objectUrl(relative), {
