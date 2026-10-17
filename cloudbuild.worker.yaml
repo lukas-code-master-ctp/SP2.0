@@ -1,0 +1,5 @@
+# Construye la imagen del motor: gcloud builds submit --config cloudbuild.worker.yaml --substitutions=_IMAGE=<imagen>
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "Dockerfile.worker", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]

@@ -1,13 +1,14 @@
 // Plataforma de obtención documental para trámites inmobiliarios (Chile).
-// SQLite en desarrollo. Para producción cambiar provider a "postgresql".
+// Postgres (Supabase). DATABASE_URL es la conexión con pooler; DIRECT_URL la directa, para migraciones.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserType {
@@ -209,4 +210,28 @@ model RequestEvent {
   type      String
   message   String
   createdAt DateTime @default(now())
+}
+
+enum JobStatus {
+  PENDIENTE
+  EN_CURSO
+  LISTO
+  FALLIDO
+}
+
+// Cola de trabajos en Postgres: la web los crea y el motor (worker) los toma con FOR UPDATE SKIP LOCKED.
+model Job {
+  id        String    @id @default(cuid())
+  type      String // "OBTENER_DOCUMENTO"
+  requestId String
+  itemId    String?
+  status    JobStatus @default(PENDIENTE)
+  attempts  Int       @default(0)
+  runAt     DateTime  @default(now())
+  lockedAt  DateTime?
+  lastError String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status, runAt])
 }

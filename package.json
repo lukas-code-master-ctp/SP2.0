@@ -11,9 +11,11 @@
     "test": "vitest run",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force",
     "postinstall": "prisma generate",
-    "obtener": "tsx scripts/obtener.ts"
+    "obtener": "tsx scripts/obtener.ts",
+    "worker": "tsx src/worker/index.ts",
+    "db:migrate": "prisma migrate deploy"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

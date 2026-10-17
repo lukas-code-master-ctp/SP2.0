@@ -1,12 +1,13 @@
-// Corre la obtención de documentos de una solicitud desde la terminal: npm run obtener -- 1001
+// Pone en cola y procesa en esta terminal los documentos de una solicitud: npm run obtener -- 1001
 import { prisma } from "../src/lib/db";
-import { retryRequest } from "../src/lib/fulfillment/engine";
+import { drainQueue, startFulfillment } from "../src/lib/fulfillment/engine";
 
 async function main() {
   const number = Number(process.argv[2]);
   if (!number) throw new Error("Uso: npm run obtener -- <número de solicitud>");
   const request = await prisma.request.findUniqueOrThrow({ where: { number } });
-  await retryRequest(request.id);
+  await startFulfillment(request.id);
+  await drainQueue();
   const items = await prisma.requestItem.findMany({
     where: { requestId: request.id, selected: true },
     include: { documentType: true },

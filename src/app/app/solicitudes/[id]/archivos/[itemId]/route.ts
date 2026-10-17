@@ -1,9 +1,7 @@
 import path from "node:path";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getOwnedRequest } from "@/lib/requests";
-import { readStoredFile } from "@/lib/storage";
-
-const MIME: Record<string, string> = { ".pdf": "application/pdf", ".png": "image/png", ".json": "application/json" };
+import { mimeFor, readStoredFile } from "@/lib/storage";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string; itemId: string }> }) {
   const { id, itemId } = await params;
@@ -17,7 +15,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const name = `${request.number}-${item.documentType.code.toLowerCase()}${ext}`;
   return new Response(new Uint8Array(file), {
     headers: {
-      "Content-Type": MIME[ext] ?? "application/octet-stream",
+      "Content-Type": mimeFor(item.filePath),
       "Content-Disposition": `inline; filename="${name}"`,
     },
   });
