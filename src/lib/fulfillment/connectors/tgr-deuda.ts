@@ -28,7 +28,9 @@ export const tgrDeuda: Connector = {
     try {
       const page = await browser.newPage({ locale: "es-CL", viewport: { width: 1280, height: 900 } });
       log(`Abriendo ${URL}`);
-      await page.goto(URL, { waitUntil: "networkidle", timeout: 60_000 });
+      // "networkidle" nunca llega en tgr.cl (scripts que siguen cargando), así que esperamos el HTML y un margen fijo.
+      await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await page.waitForTimeout(5_000);
       const title = await page.title();
       await save("_exploracion/tgr-1.png", await page.screenshot({ fullPage: true }));
       await save("_exploracion/tgr-1.html", await page.content());
