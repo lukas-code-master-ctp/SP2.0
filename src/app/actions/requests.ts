@@ -22,6 +22,21 @@ const newRequestSchema = z.object({
     }
     return rol;
   }),
+  foja: z.string().trim().max(10).optional().transform((v) => v || null),
+  inscripcionNumero: z.string().trim().max(10).optional().transform((v) => v || null),
+  inscripcionAnio: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v, ctx) => {
+      if (!v) return null;
+      const year = Number(v);
+      if (!Number.isInteger(year) || year < 1850 || year > new Date().getFullYear()) {
+        ctx.addIssue({ code: "custom", message: "Año inválido" });
+        return z.NEVER;
+      }
+      return year;
+    }),
 });
 
 /** Pasos 4 a 8: crea la solicitud con todos los documentos requeridos marcados. */
@@ -29,7 +44,7 @@ export async function createRequest(_: FormState, formData: FormData): Promise<F
   const user = await requireOnboardedUser();
   const parsed = newRequestSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
-  const { procedure: code, regionId, comunaId, rol } = parsed.data;
+  const { procedure: code, regionId, comunaId, rol, foja, inscripcionNumero, inscripcionAnio } = parsed.data;
 
   const comuna = await prisma.comuna.findUnique({ where: { id: comunaId } });
   if (!comuna || comuna.regionId !== regionId) return { fieldErrors: { comunaId: ["Comuna inválida"] } };
@@ -59,6 +74,9 @@ export async function createRequest(_: FormState, formData: FormData): Promise<F
         procedureId: procedure.id,
         comunaId,
         rol,
+        foja,
+        inscripcionNumero,
+        inscripcionAnio,
         ...totals,
         items: { create: items },
         events: { create: { type: "CREADA", message: "Solicitud creada." } },

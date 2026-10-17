@@ -14,5 +14,6 @@ export const ITEM_STATUS_LABEL: Record<ItemStatus, string> = {
   PENDIENTE: "Pendiente",
   OBTENIENDO: "Obteniendo",
   OBTENIDO: "Obtenido",
-  FALLIDO: "Con problemas",
+  REQUIERE_ACCION: "En revisión",
+  FALLIDO: "Reintentando",
 };

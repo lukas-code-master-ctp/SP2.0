@@ -1,0 +1,15 @@
+# Motor de obtención de documentos (worker). Imagen oficial de Playwright con Chromium incluido.
+FROM mcr.microsoft.com/playwright:v1.64.1-noble
+
+WORKDIR /app
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 CONNECTORS_HEADLESS=true STORAGE_DRIVER=supabase TZ=America/Santiago
+
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src
+COPY scripts ./scripts
+
+CMD ["npm", "run", "worker"]
