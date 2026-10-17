@@ -13,7 +13,7 @@ La web nunca ejecuta conectores en producción (`WORKER_INLINE=false`): solo cre
 1. Crear proyecto en región **South America (São Paulo)**.
 2. *Storage* → crear bucket **privado** `documentos`.
 3. *Project Settings → Database → Connection string*: copiar la URL con pooler (puerto 6543, agregar `?pgbouncer=true`) como `DATABASE_URL` y la de puerto 5432 como `DIRECT_URL`.
-4. *Project Settings → API*: copiar `URL` (`SUPABASE_URL`) y la clave `service_role` (`SUPABASE_SERVICE_ROLE_KEY`, secreta).
+4. `SUPABASE_URL` es `https://<ref>.supabase.co`. *Project Settings → API Keys → Secret keys*: copiar la clave `sb_secret_...` como `SUPABASE_SERVICE_ROLE_KEY` (también sirve la `service_role` antigua).
 5. Desde tu PC, con esas variables en `.env`:
    ```
    npm run db:migrate
