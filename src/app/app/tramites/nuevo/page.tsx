@@ -13,7 +13,7 @@ export default async function NewRequestPage() {
   return (
     <>
       <Steps current={0} />
-      <h1 className="text-2xl font-bold">Nuevo trámite</h1>
+      <h1 className="title">Nuevo trámite</h1>
       <p className="mt-2 text-slate-600">Cuéntanos qué necesitas y dónde está la propiedad.</p>
       <NewRequestForm
         procedures={procedures.map((p) => ({ code: p.code, name: p.name, description: p.description }))}

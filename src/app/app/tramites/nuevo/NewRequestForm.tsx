@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { motion } from "motion/react";
+import { ArrowRight, Check } from "lucide-react";
 import { createRequest } from "@/app/actions/requests";
 import { Field, FormError, SubmitButton, cx } from "@/components/ui";
 
@@ -21,13 +23,29 @@ export function NewRequestForm({ procedures, regions }: Props) {
       <FormError message={state?.error} />
 
       <section>
-        <h2 className="mb-3 font-semibold">¿Qué trámite necesitas?</h2>
+        <SectionTitle n={1}>¿Qué trámite necesitas?</SectionTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           {procedures.map((p) => (
             <label
               key={p.code}
-              className={cx("card cursor-pointer transition", procedure === p.code ? "!border-brand-500 bg-brand-50 ring-2 ring-brand-100" : "hover:border-slate-300")}
+              className={cx(
+                "card relative cursor-pointer transition duration-200 ease-out has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-brand-200",
+                procedure === p.code ? "!border-brand-500 bg-brand-50/60 ring-4 ring-brand-100" : "card-interactive",
+              )}
             >
+              <span
+                className={cx(
+                  "absolute right-4 top-4 grid h-6 w-6 place-items-center rounded-full border-2 transition",
+                  procedure === p.code ? "border-brand-500 bg-brand-500 text-white" : "border-cloud bg-white",
+                )}
+                aria-hidden
+              >
+                {procedure === p.code && (
+                  <motion.span className="block" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500, damping: 25 }}>
+                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                  </motion.span>
+                )}
+              </span>
               <input
                 type="radio"
                 name="procedure"
@@ -36,16 +54,16 @@ export function NewRequestForm({ procedures, regions }: Props) {
                 checked={procedure === p.code}
                 onChange={() => setProcedure(p.code)}
               />
-              <span className="block font-semibold">{p.name}</span>
+              <span className="block pr-8 font-semibold text-brand-900">{p.name}</span>
               <span className="mt-1 block text-sm text-slate-600">{p.description}</span>
             </label>
           ))}
         </div>
-        {e?.procedure && <p className="mt-2 text-xs text-red-600">{e.procedure[0]}</p>}
+        {e?.procedure && <p role="alert" className="mt-2 text-xs font-medium text-red-600">{e.procedure[0]}</p>}
       </section>
 
       <section className="card grid gap-4 sm:grid-cols-3">
-        <h2 className="font-semibold sm:col-span-3">¿Dónde está la propiedad?</h2>
+        <div className="sm:col-span-3"><SectionTitle n={2}>¿Dónde está la propiedad?</SectionTitle></div>
         <label className="block">
           <span className="label">Región</span>
           <select name="regionId" className="input" value={regionId} onChange={(ev) => setRegionId(ev.target.value)} required>
@@ -54,7 +72,7 @@ export function NewRequestForm({ procedures, regions }: Props) {
               <option key={r.id} value={r.id}>{r.name}</option>
             ))}
           </select>
-          {e?.regionId && <span className="mt-1 block text-xs text-red-600">{e.regionId[0]}</span>}
+          {e?.regionId && <span role="alert" className="mt-1.5 block text-xs font-medium text-red-600">{e.regionId[0]}</span>}
         </label>
         <label className="block">
           <span className="label">Comuna</span>
@@ -64,7 +82,7 @@ export function NewRequestForm({ procedures, regions }: Props) {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          {e?.comunaId && <span className="mt-1 block text-xs text-red-600">{e.comunaId[0]}</span>}
+          {e?.comunaId && <span role="alert" className="mt-1.5 block text-xs font-medium text-red-600">{e.comunaId[0]}</span>}
         </label>
         <Field
           label="Rol de avalúo"
@@ -78,8 +96,8 @@ export function NewRequestForm({ procedures, regions }: Props) {
 
       <section className="card grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-3">
-          <h2 className="font-semibold">Inscripción en el Conservador (opcional)</h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <SectionTitle n={3}>Inscripción en el Conservador <span className="font-normal text-slate-400">(opcional)</span></SectionTitle>
+          <p className="mt-1 pl-10 text-sm text-slate-600">
             Si tienes la foja, número y año de la inscripción, los documentos del Conservador salen más rápido. Si no,
             los buscamos nosotros a partir del rol.
           </p>
@@ -91,8 +109,8 @@ export function NewRequestForm({ procedures, regions }: Props) {
 
       <section className="card grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-3">
-          <h2 className="font-semibold">Propietario (opcional)</h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <SectionTitle n={4}>Propietario <span className="font-normal text-slate-400">(opcional)</span></SectionTitle>
+          <p className="mt-1 pl-10 text-sm text-slate-600">
             Algunos certificados, como el de matrimonio, se piden con el RUN del propietario. Si no lo tienes, los
             gestionamos nosotros.
           </p>
@@ -101,8 +119,19 @@ export function NewRequestForm({ procedures, regions }: Props) {
       </section>
 
       <div className="flex justify-end">
-        <SubmitButton>Ver documentos requeridos →</SubmitButton>
+        <SubmitButton>Ver documentos requeridos <ArrowRight className="h-4 w-4" aria-hidden /></SubmitButton>
       </div>
     </form>
+  );
+}
+
+function SectionTitle({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <h2 className="mb-3 flex items-center gap-3 font-semibold text-brand-900">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-grad-light text-xs font-semibold text-white" aria-hidden>
+        {n}
+      </span>
+      {children}
+    </h2>
   );
 }
