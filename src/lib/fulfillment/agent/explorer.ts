@@ -176,6 +176,7 @@ function requester(): string | null {
   const rut = cleanRut(COMPANY_RUT);
   return [
     `Nombre o institución: ${COMPANY_NAME || "-"}`,
+    `Si piden la institución a la que se presentará o destinataria del certificado, usa también "${COMPANY_NAME || "-"}".`,
     // Los formularios del Estado suelen pedir el número y el dígito verificador por separado y sin puntos.
     `RUT: ${COMPANY_RUT} (número sin puntos: ${rut.slice(0, -1)}, dígito verificador: ${rut.slice(-1)}). Escríbelo en el formato que pida cada campo.`,
     "Es una empresa (persona jurídica): si el formulario tiene una casilla o opción de empresa, márcala antes de ingresar el RUT.",
