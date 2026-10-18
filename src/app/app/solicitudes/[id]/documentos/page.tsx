@@ -13,7 +13,7 @@ export default async function DocumentsPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <Steps current={1} />
-      <h1 className="text-2xl font-bold">Documentos requeridos</h1>
+      <h1 className="title">Documentos requeridos</h1>
       <p className="mt-2 text-slate-600">
         {request.procedure.name} · Rol {request.rol}, {request.comuna.name}, {request.comuna.region.name}
       </p>

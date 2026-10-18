@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useActionState } from "react";
 import type { UserType } from "@prisma/client";
 import { saveProfile } from "@/app/actions/onboarding";
@@ -10,7 +11,7 @@ export function ProfileForm({ userType }: { userType: UserType }) {
   const [state, action] = useActionState(saveProfile, undefined);
   const e = state?.fieldErrors;
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-5">
       <FormError message={state?.error} />
       {userType === "PERSONA" ? (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -31,8 +32,8 @@ export function ProfileForm({ userType }: { userType: UserType }) {
         </div>
       )}
       <div className="flex items-center justify-between pt-2">
-        <Link href="/onboarding" className="text-sm text-slate-600">← Cambiar tipo de cuenta</Link>
-        <SubmitButton>Continuar</SubmitButton>
+        <Link href="/onboarding" className="btn-ghost -ml-3"><ArrowLeft className="h-4 w-4" aria-hidden /> Cambiar tipo de cuenta</Link>
+        <SubmitButton>Continuar <ArrowRight className="h-4 w-4" aria-hidden /></SubmitButton>
       </div>
     </form>
   );
