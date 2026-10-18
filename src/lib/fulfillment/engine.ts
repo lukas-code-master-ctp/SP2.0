@@ -3,15 +3,17 @@ import { prisma } from "../db";
 import { requestReadyEmail, sendEmail } from "../email";
 import { requestFolder, saveFile } from "../storage";
 import { claimNextJob, completeJob, enqueueDocumentJobs, failJob, retryJobLater } from "./queue";
-import { runExplorerAgent } from "./agent/explorer";
+import type { AgentDocument } from "./agent/explorer";
+import { obtainWithAgent, SiteDownError } from "./agent/self-heal";
 import { connectorFor } from "./registry";
-import type { Connector, ConnectorResult, PropertyRef } from "./types";
+import type { Connector, ConnectorContext, ConnectorResult, PropertyRef } from "./types";
 
 export const MAX_ATTEMPTS = 3;
 const CONNECTOR_TIMEOUT_MS = 3 * 60_000;
 // El agente navega paso a paso con un modelo de IA, así que le damos más margen que a un conector fijo.
-const AGENT_TIMEOUT_MS = 10 * 60_000;
+const AGENT_TIMEOUT_MS = 20 * 60_000; // hasta dos intentos del agente
 const RETRY_DELAY_MS = 30_000;
+const SITE_DOWN_DELAY_MS = 15 * 60_000;
 
 async function event(requestId: string, type: string, message: string) {
   await prisma.requestEvent.create({ data: { requestId, type, message } });
@@ -86,14 +88,9 @@ async function runJob(job: Job) {
     return;
   }
 
-  // Sin conector fijo, intenta el agente de IA (si hay clave de OpenRouter); si tampoco, queda para el equipo.
-  const connector: Connector | undefined =
-    connectorFor(documentType.code) ??
-    (process.env.OPENROUTER_API_KEY
-      ? { documentCode: documentType.code, name: "Agente IA", obtain: (ctx) => runExplorerAgent(documentType, ctx) }
-      : undefined);
-  const timeoutMs = connectorFor(documentType.code) ? CONNECTOR_TIMEOUT_MS : AGENT_TIMEOUT_MS;
-  if (!connector) {
+  const fixed = connectorFor(documentType.code);
+  const agent = Boolean(process.env.OPENROUTER_API_KEY);
+  if (!fixed && !agent) {
     console.log(`[motor #${request.number} ${documentType.code}] Sin conector automático: queda para el equipo.`);
     await prisma.requestItem.update({
       where: { id: item.id },
@@ -126,10 +123,8 @@ async function runJob(job: Job) {
 
   let result: ConnectorResult;
   try {
-    result = await withTimeout(
-      connector.obtain({ property, save: (name, content) => saveFile(folder, name, content), log }),
-      timeoutMs,
-    );
+    const ctx: ConnectorContext = { property, save: (name, content) => saveFile(folder, name, content), log };
+    result = await obtain(fixed, agent ? documentType : null, ctx);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     log(`Error: ${message}`);
@@ -144,7 +139,8 @@ async function runJob(job: Job) {
     });
     await event(request.id, "DOCUMENTO_FALLIDO", `${documentType.name}: intento ${job.attempts} falló (${message}).`);
     if (final) await failJob(job.id, message);
-    else await retryJobLater(job.id, message, RETRY_DELAY_MS * job.attempts);
+    // Si el sitio del emisor está caído no sirve reintentar en segundos: esperamos más.
+    else await retryJobLater(job.id, message, e instanceof SiteDownError ? SITE_DOWN_DELAY_MS : RETRY_DELAY_MS * job.attempts);
     return;
   }
 
@@ -165,6 +161,28 @@ async function runJob(job: Job) {
   );
   await completeJob(job.id);
   await finishIfComplete(request.id, request.user.email, request.number);
+}
+
+/**
+ * Primero el conector fijo (rápido y barato). Si no existe, falla o no lo logra, entra el agente de IA, que
+ * recuerda lo que funcionó antes y reintenta solo cuando puede corregirse (ver agent/self-heal.ts).
+ */
+async function obtain(
+  fixed: Connector | undefined,
+  agentDoc: AgentDocument | null,
+  ctx: ConnectorContext,
+): Promise<ConnectorResult> {
+  if (fixed) {
+    try {
+      const result = await withTimeout(fixed.obtain(ctx), CONNECTOR_TIMEOUT_MS);
+      if (result.status === "OBTENIDO" || !agentDoc) return result;
+      ctx.log(`El conector fijo no lo logró (${result.detail}); entra el agente.`);
+    } catch (e) {
+      if (!agentDoc) throw e;
+      ctx.log(`El conector fijo falló (${e instanceof Error ? e.message : e}); entra el agente.`);
+    }
+  }
+  return withTimeout(obtainWithAgent(agentDoc!, ctx), AGENT_TIMEOUT_MS);
 }
 
 async function finishIfComplete(requestId: string, email: string, number: number) {

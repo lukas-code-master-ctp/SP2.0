@@ -1,0 +1,11 @@
+# Lo que NO se sube a Google Cloud al construir la imagen del motor (gcloud builds submit).
+.git
+node_modules/
+.next/
+storage/
+.env
+.env.*
+!.env.example
+motor.env.yaml
+prisma/*.db
+*.tsbuildinfo

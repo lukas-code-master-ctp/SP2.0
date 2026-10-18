@@ -145,28 +145,28 @@ model ProcedureRequirement {
 }
 
 model Request {
-  id            String        @id @default(cuid())
-  number        Int           @unique // correlativo legible (#1001)
-  userId        String
-  user          User          @relation(fields: [userId], references: [id])
-  procedureId   String
-  procedure     Procedure     @relation(fields: [procedureId], references: [id])
-  comunaId      Int
-  comuna        Comuna        @relation(fields: [comunaId], references: [id])
-  rol           String // rol de avalúo SII, ej "123-45"
+  id                String        @id @default(cuid())
+  number            Int           @unique // correlativo legible (#1001)
+  userId            String
+  user              User          @relation(fields: [userId], references: [id])
+  procedureId       String
+  procedure         Procedure     @relation(fields: [procedureId], references: [id])
+  comunaId          Int
+  comuna            Comuna        @relation(fields: [comunaId], references: [id])
+  rol               String // rol de avalúo SII, ej "123-45"
   // Inscripción en el Conservador (opcional; si falta se busca a partir del rol)
-  foja          String?
+  foja              String?
   inscripcionNumero String?
   inscripcionAnio   Int?
   propietarioRun    String? // opcional: algunos certificados (p. ej. matrimonio) son del propietario
-  includeReport Boolean       @default(false)
-  documentsTotal Int          @default(0)
-  reportTotal   Int           @default(0)
-  total         Int           @default(0)
-  status        RequestStatus @default(BORRADOR)
-  folderPath    String? // carpeta donde se guardan los documentos
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  includeReport     Boolean       @default(false)
+  documentsTotal    Int           @default(0)
+  reportTotal       Int           @default(0)
+  total             Int           @default(0)
+  status            RequestStatus @default(BORRADOR)
+  folderPath        String? // carpeta donde se guardan los documentos
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   items    RequestItem[]
   payments Payment[]
@@ -235,4 +235,15 @@ model Job {
   updatedAt DateTime  @updatedAt
 
   @@index([status, runAt])
+}
+
+// Lo que el agente de IA aprendió por tipo de documento: la última ruta que funcionó y por qué fallaron
+// los últimos intentos. Se le muestra en cada intento nuevo para que repita lo que sirve y evite lo que no.
+model AgentMemory {
+  documentCode String    @id
+  recipe       Json? // pasos del último intento exitoso
+  recipeAt     DateTime?
+  successes    Int       @default(0)
+  lessons      Json      @default("[]") // últimos fallos: [{ fecha, motivo, resumen }]
+  updatedAt    DateTime  @updatedAt
 }
