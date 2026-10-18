@@ -14,7 +14,7 @@
     "db:reset": "prisma migrate reset --force",
     "postinstall": "prisma generate",
     "obtener": "tsx scripts/obtener.ts",
-    "worker": "tsx src/worker/index.ts",
+    "worker": "tsx --env-file-if-exists=.env src/worker/index.ts",
     "db:migrate": "prisma migrate deploy",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy && tsx prisma/seed.ts; fi && next build"
   },
