@@ -3,11 +3,14 @@ import { prisma } from "../db";
 import { requestReadyEmail, sendEmail } from "../email";
 import { requestFolder, saveFile } from "../storage";
 import { claimNextJob, completeJob, enqueueDocumentJobs, failJob, retryJobLater } from "./queue";
+import { runExplorerAgent } from "./agent/explorer";
 import { connectorFor } from "./registry";
-import type { ConnectorResult, PropertyRef } from "./types";
+import type { Connector, ConnectorResult, PropertyRef } from "./types";
 
 export const MAX_ATTEMPTS = 3;
 const CONNECTOR_TIMEOUT_MS = 3 * 60_000;
+// El agente navega paso a paso con un modelo de IA, así que le damos más margen que a un conector fijo.
+const AGENT_TIMEOUT_MS = 10 * 60_000;
 const RETRY_DELAY_MS = 30_000;
 
 async function event(requestId: string, type: string, message: string) {
@@ -83,7 +86,13 @@ async function runJob(job: Job) {
     return;
   }
 
-  const connector = connectorFor(documentType.code);
+  // Sin conector fijo, intenta el agente de IA (si hay clave de OpenRouter); si tampoco, queda para el equipo.
+  const connector: Connector | undefined =
+    connectorFor(documentType.code) ??
+    (process.env.OPENROUTER_API_KEY
+      ? { documentCode: documentType.code, name: "Agente IA", obtain: (ctx) => runExplorerAgent(documentType, ctx) }
+      : undefined);
+  const timeoutMs = connectorFor(documentType.code) ? CONNECTOR_TIMEOUT_MS : AGENT_TIMEOUT_MS;
   if (!connector) {
     console.log(`[motor #${request.number} ${documentType.code}] Sin conector automático: queda para el equipo.`);
     await prisma.requestItem.update({
@@ -118,7 +127,7 @@ async function runJob(job: Job) {
   try {
     result = await withTimeout(
       connector.obtain({ property, save: (name, content) => saveFile(folder, name, content), log }),
-      CONNECTOR_TIMEOUT_MS,
+      timeoutMs,
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
