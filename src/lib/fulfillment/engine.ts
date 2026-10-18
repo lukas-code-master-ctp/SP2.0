@@ -85,6 +85,7 @@ async function runJob(job: Job) {
 
   const connector = connectorFor(documentType.code);
   if (!connector) {
+    console.log(`[motor #${request.number} ${documentType.code}] Sin conector automático: queda para el equipo.`);
     await prisma.requestItem.update({
       where: { id: item.id },
       data: { status: "REQUIERE_ACCION", detail: "Lo gestiona nuestro equipo (aún no está automatizado)." },
@@ -137,6 +138,7 @@ async function runJob(job: Job) {
     return;
   }
 
+  log(result.status === "OBTENIDO" ? "Obtenido." : `Requiere acción: ${result.detail ?? ""}`);
   await prisma.requestItem.update({
     where: { id: item.id },
     data: {
