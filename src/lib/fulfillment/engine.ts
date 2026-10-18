@@ -114,6 +114,7 @@ async function runJob(job: Job) {
     foja: request.foja,
     inscripcionNumero: request.inscripcionNumero,
     inscripcionAnio: request.inscripcionAnio,
+    propietarioRun: request.propietarioRun,
   };
   const folder = request.folderPath ?? requestFolder(request.number);
   const log = (m: string) => console.log(`[motor #${request.number} ${documentType.code}] ${m}`);

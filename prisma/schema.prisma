@@ -158,6 +158,7 @@ model Request {
   foja          String?
   inscripcionNumero String?
   inscripcionAnio   Int?
+  propietarioRun    String? // opcional: algunos certificados (p. ej. matrimonio) son del propietario
   includeReport Boolean       @default(false)
   documentsTotal Int          @default(0)
   reportTotal   Int           @default(0)

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOnboardedUser } from "@/lib/auth";
 import { normalizeRol } from "@/lib/rol";
+import { formatRut, isValidRut } from "@/lib/rut";
 import { computeTotals, resolveRequirements } from "@/lib/requirements";
 import { getOwnedRequest, markRequestPaid, withRequestNumber } from "@/lib/requests";
 import { getPaymentProvider } from "@/lib/payments";
@@ -37,6 +38,18 @@ const newRequestSchema = z.object({
       }
       return year;
     }),
+  propietarioRun: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v, ctx) => {
+      if (!v) return null;
+      if (!isValidRut(v)) {
+        ctx.addIssue({ code: "custom", message: "RUN inválido" });
+        return z.NEVER;
+      }
+      return formatRut(v);
+    }),
 });
 
 /** Pasos 4 a 8: crea la solicitud con todos los documentos requeridos marcados. */
@@ -44,7 +57,7 @@ export async function createRequest(_: FormState, formData: FormData): Promise<F
   const user = await requireOnboardedUser();
   const parsed = newRequestSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
-  const { procedure: code, regionId, comunaId, rol, foja, inscripcionNumero, inscripcionAnio } = parsed.data;
+  const { procedure: code, regionId, comunaId, rol, foja, inscripcionNumero, inscripcionAnio, propietarioRun } = parsed.data;
 
   const comuna = await prisma.comuna.findUnique({ where: { id: comunaId } });
   if (!comuna || comuna.regionId !== regionId) return { fieldErrors: { comunaId: ["Comuna inválida"] } };
@@ -77,6 +90,7 @@ export async function createRequest(_: FormState, formData: FormData): Promise<F
         foja,
         inscripcionNumero,
         inscripcionAnio,
+        propietarioRun,
         ...totals,
         items: { create: items },
         events: { create: { type: "CREADA", message: "Solicitud creada." } },

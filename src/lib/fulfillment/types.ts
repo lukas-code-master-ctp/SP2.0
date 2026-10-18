@@ -8,6 +8,7 @@ export type PropertyRef = {
   foja: string | null;
   inscripcionNumero: string | null;
   inscripcionAnio: number | null;
+  propietarioRun: string | null;
 };
 
 export type ConnectorContext = {
