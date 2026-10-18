@@ -1,4 +1,4 @@
-# Despliega el motor de obtención en Google Cloud Run, Santiago (southamerica-west1).
+﻿# Despliega el motor de obtención en Google Cloud Run, Santiago (southamerica-west1).
 # Uso (en PowerShell, dentro de la carpeta del proyecto, con la CLI de Google Cloud instalada y sesión iniciada):
 #   powershell -ExecutionPolicy Bypass -File scripts\desplegar-motor.ps1 -Proyecto <id-del-proyecto>
 # Toma las variables del .env local, construye la imagen en Cloud Build y deja el servicio sp2-motor corriendo.
@@ -39,7 +39,7 @@ $yaml = foreach ($k in $claves + "APP_URL", "WORKER_CONCURRENCY") {
 try {
   Ejecutar "Proyecto $Proyecto" { gcloud config set project $Proyecto }
   Ejecutar "Activando servicios (la primera vez tarda un poco)" {
-    gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+    gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com iam.googleapis.com
   }
   # Con "Stop", PowerShell 5 trata como error lo que gcloud escribe en stderr; aquí solo miramos el código de salida.
   $ErrorActionPreference = "Continue"
@@ -51,13 +51,31 @@ try {
       gcloud artifacts repositories create sp2 --repository-format=docker --location=$region
     }
   }
+  # Cuenta propia para construir y correr el motor: en proyectos nuevos la cuenta por defecto de Cloud Build
+  # no trae permisos y el build falla con PERMISSION_DENIED.
+  $cuenta = "sp2-motor@$Proyecto.iam.gserviceaccount.com"
+  $ErrorActionPreference = "Continue"
+  gcloud iam service-accounts describe $cuenta *> $null
+  $existe = $LASTEXITCODE -eq 0
+  $ErrorActionPreference = "Stop"
+  if (-not $existe) {
+    Ejecutar "Creando la cuenta de servicio sp2-motor" {
+      gcloud iam service-accounts create sp2-motor --display-name "Motor SP2"
+    }
+  }
+  Ejecutar "Dando permisos a la cuenta de servicio" {
+    gcloud projects add-iam-policy-binding $Proyecto --member "serviceAccount:$cuenta" `
+      --role roles/cloudbuild.builds.builder --condition None --quiet > $null
+  }
+  if (-not $existe) { Start-Sleep -Seconds 30 } # los permisos nuevos tardan en aplicarse
   Ejecutar "Construyendo la imagen del motor (unos minutos)" {
-    gcloud builds submit --config cloudbuild.worker.yaml --substitutions "_IMAGE=$imagen" .
+    gcloud builds submit --region $region --service-account "projects/$Proyecto/serviceAccounts/$cuenta" `
+      --config cloudbuild.worker.yaml --substitutions "_IMAGE=$imagen" .
   }
   Ejecutar "Desplegando sp2-motor en Santiago" {
     gcloud run deploy sp2-motor --image $imagen --region $region --no-allow-unauthenticated `
       --no-cpu-throttling --min-instances 1 --max-instances 1 --cpu 2 --memory 4Gi `
-      --env-vars-file motor.env.yaml
+      --env-vars-file motor.env.yaml --service-account $cuenta
   }
   Write-Host "`nListo: el motor quedó corriendo en Cloud Run (sp2-motor, $region)." -ForegroundColor Green
   Write-Host "Ya puedes cerrar el worker de tu PC (Ctrl+C)."
