@@ -1,6 +1,7 @@
+import { proxyFor } from "../proxy";
 import type { Connector } from "../types";
 
-// TGR bloquea conexiones desde fuera de Chile, así que este conector solo funciona corriendo en Chile.
+// TGR bloquea conexiones desde fuera de Chile y desde datacenters: en la nube sale por el proxy chileno (ver proxy.ts).
 // Etapa actual: abre el trámite con un navegador real y guarda captura y HTML para grabar la ruta exacta
 // (formulario, captcha, descarga). Cuando la ruta esté grabada, este conector descargará el certificado.
 const URL = "https://www.tgr.cl/tramites-tgr/certificado-de-deuda-de-contribuciones/";
@@ -21,6 +22,7 @@ export const tgrDeuda: Connector = {
       browser = await playwright.chromium.launch({
         headless: process.env.CONNECTORS_HEADLESS !== "false",
         executablePath: process.env.CHROMIUM_PATH || undefined,
+        proxy: proxyFor("DEUDA_CONTRIBUCIONES"),
       });
     } catch {
       return { status: "REQUIERE_ACCION", detail: "Falta instalar el navegador automático (npx playwright install chromium)." };

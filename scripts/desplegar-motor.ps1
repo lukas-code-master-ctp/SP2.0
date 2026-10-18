@@ -18,7 +18,8 @@ if (-not (Test-Path .env)) { throw "No encuentro el .env: ejecuta el script desd
 
 # Variables que necesita el motor (sin imprimir sus valores).
 $claves = "DATABASE_URL", "DIRECT_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_BUCKET", "EMAIL_PROVIDER",
-  "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "COMPANY_NAME", "COMPANY_RUT", "COMPANY_EMAIL"
+  "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "COMPANY_NAME", "COMPANY_RUT", "COMPANY_EMAIL",
+  "PROXY_CL_URL", "PROXY_CL_DOCS"
 $vars = @{}
 foreach ($linea in Get-Content .env) {
   # KEY="valor"  # comentario   |   KEY=valor
