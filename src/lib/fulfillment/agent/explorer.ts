@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { Browser, Download, Frame, Page } from "playwright";
 import { cleanRut } from "../../rut";
+import { proxyFor } from "../proxy";
 import type { ConnectorContext, ConnectorResult } from "../types";
 
 // Agente explorador: cuando un documento no tiene conector, un LLM (vía OpenRouter) maneja un navegador real
@@ -100,6 +101,7 @@ export async function runExplorerAgent(
     browser = await playwright.chromium.launch({
       headless: process.env.CONNECTORS_HEADLESS !== "false",
       executablePath: process.env.CHROMIUM_PATH || undefined,
+      proxy: proxyFor(doc.code),
     });
   } catch {
     return manual("Falta instalar el navegador automático (npx playwright install chromium).");
