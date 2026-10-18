@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { Browser, Download, Frame, Page } from "playwright";
+import { cleanRut } from "../../rut";
 import type { ConnectorContext, ConnectorResult } from "../types";
 
 // Agente explorador: cuando un documento no tiene conector, un LLM (vía OpenRouter) maneja un navegador real
@@ -167,7 +168,14 @@ export async function runExplorerAgent(doc: AgentDocument, { property, save, log
 function requester(): string | null {
   const { COMPANY_NAME, COMPANY_RUT, COMPANY_EMAIL } = process.env;
   if (!COMPANY_RUT || !COMPANY_EMAIL) return null;
-  return [`Nombre o institución: ${COMPANY_NAME || "-"}`, `RUT: ${COMPANY_RUT}`, `Correo: ${COMPANY_EMAIL}`].join("\n");
+  const rut = cleanRut(COMPANY_RUT);
+  return [
+    `Nombre o institución: ${COMPANY_NAME || "-"}`,
+    // Los formularios del Estado suelen pedir el número y el dígito verificador por separado y sin puntos.
+    `RUT: ${COMPANY_RUT} (número sin puntos: ${rut.slice(0, -1)}, dígito verificador: ${rut.slice(-1)}). Escríbelo en el formato que pida cada campo.`,
+    "Es una empresa (persona jurídica): si el formulario tiene una casilla o opción de empresa, márcala antes de ingresar el RUT.",
+    `Correo: ${COMPANY_EMAIL}`,
+  ].join("\n");
 }
 
 async function nextToolCall(apiKey: string, messages: Message[]): Promise<ToolCall> {
