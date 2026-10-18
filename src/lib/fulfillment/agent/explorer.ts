@@ -33,6 +33,9 @@ Reglas:
 - Cuando descargues el certificado, termina con "obtenido". Sé eficiente: tienes un máximo de ${MAX_STEPS} pasos.
 Responde siempre llamando a una herramienta.`;
 
+export const MOTIVOS = ["falta_dato", "login_o_pago", "captcha", "sitio_caido", "ruta_no_encontrada", "otro"] as const;
+export type Motivo = (typeof MOTIVOS)[number];
+
 const TOOLS = [
   tool("abrir", "Abre una URL en la pestaña actual.", { url: { type: "string" } }, ["url"]),
   tool("clic", "Hace clic en un elemento por su id de la lista.", { id: { type: "string" } }, ["id"]),
@@ -49,6 +52,11 @@ const TOOLS = [
   tool("captura", "Toma una captura de pantalla para ver la página.", {}, []),
   tool("terminar", "Termina la tarea.", {
     resultado: { type: "string", enum: ["obtenido", "enviado_por_correo", "requiere_accion"] },
+    motivo: {
+      type: "string",
+      enum: MOTIVOS,
+      description: "Si no lo obtuviste, por qué: falta_dato, login_o_pago, captcha, sitio_caido (error o caída del sitio), ruta_no_encontrada u otro.",
+    },
     resumen: { type: "string", description: "Qué pasó y, si falta algo, los pasos exactos para una persona." },
   }, ["resultado", "resumen"]),
 ];
@@ -61,11 +69,29 @@ type Message =
   | { role: "system" | "assistant" | "user"; content: string | unknown[] | null; tool_calls?: ToolCall[] }
   | { role: "tool"; tool_call_id: string; content: string };
 type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
-type Step = { paso: number; herramienta: string; argumentos: Record<string, unknown>; url: string; resultado: string };
+export type Step = {
+  paso: number;
+  herramienta: string;
+  argumentos: Record<string, unknown>;
+  /** Texto del elemento usado ("input text \"Rol\""), para repetir la ruta aunque cambien los ids. */
+  elemento?: string;
+  url: string;
+  resultado: string;
+};
 
-export async function runExplorerAgent(doc: AgentDocument, { property, save, log }: ConnectorContext): Promise<ConnectorResult> {
+export type AgentOutcome = { result: ConnectorResult; motivo: Motivo | null; resumen: string; steps: Step[] };
+
+/**
+ * Un intento del agente. `guia` es lo que aprendió en intentos anteriores (ruta que funcionó, errores a evitar).
+ * Devuelve el resultado y el motivo cuando no lo obtuvo, para que quien lo llama decida si reintentar.
+ */
+export async function runExplorerAgent(
+  doc: AgentDocument,
+  { property, save, log }: ConnectorContext,
+  guia?: string,
+): Promise<AgentOutcome> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return { status: "REQUIERE_ACCION", detail: "Lo gestiona nuestro equipo (aún no está automatizado)." };
+  if (!apiKey) return manual("Lo gestiona nuestro equipo (aún no está automatizado).");
 
   let playwright: typeof import("playwright");
   let browser: Browser;
@@ -76,15 +102,16 @@ export async function runExplorerAgent(doc: AgentDocument, { property, save, log
       executablePath: process.env.CHROMIUM_PATH || undefined,
     });
   } catch {
-    return { status: "REQUIERE_ACCION", detail: "Falta instalar el navegador automático (npx playwright install chromium)." };
+    return manual("Falta instalar el navegador automático (npx playwright install chromium).");
   }
 
   const dir = `_agente/${doc.code}`;
   const steps: Step[] = [];
-  const finishWith = async (result: ConnectorResult, summary: string) => {
-    await save(`${dir}/receta.json`, JSON.stringify({ documento: doc, propiedad: property, resultado: result.status, resumen: summary, pasos: steps }, null, 2));
-    return result;
+  const finishWith = async (result: ConnectorResult, resumen: string, motivo: Motivo | null): Promise<AgentOutcome> => {
+    await save(`${dir}/receta.json`, JSON.stringify({ documento: doc, propiedad: property, resultado: result.status, motivo, resumen, pasos: steps }, null, 2));
+    return { result, motivo, resumen, steps };
   };
+  let lastPage = "";
 
   try {
     const context = await browser.newContext({ locale: "es-CL", viewport: { width: 1280, height: 900 }, acceptDownloads: true });
@@ -112,7 +139,7 @@ export async function runExplorerAgent(doc: AgentDocument, { property, save, log
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Obtén el documento "${doc.name}" (${doc.description}). Emisor: ${doc.issuer}.\n${START_HINTS[doc.code] ?? ""}\n\nDatos de la propiedad:\n${datos}\n\nDatos del solicitante (nuestra empresa):\n${solicitante ?? "No hay; si el sitio los pide, termina con requiere_accion."}\n\nLa pestaña está en blanco: empieza abriendo una URL.`,
+        content: `Obtén el documento "${doc.name}" (${doc.description}). Emisor: ${doc.issuer}.\n${START_HINTS[doc.code] ?? ""}\n\nDatos de la propiedad:\n${datos}\n\nDatos del solicitante (nuestra empresa):\n${solicitante ?? "No hay; si el sitio los pide, termina con requiere_accion."}\n${guia ? `\n${guia}\n` : ""}\nLa pestaña está en blanco: empieza abriendo una URL.`,
       },
     ];
 
@@ -130,19 +157,22 @@ export async function runExplorerAgent(doc: AgentDocument, { property, save, log
           const ext = (download.suggestedFilename().split(".").pop() || "pdf").toLowerCase();
           const filePath = await save(`${doc.code.toLowerCase()}.${ext}`, await readFile(await download.path()));
           steps.push({ paso: n, herramienta: name, argumentos: args, url: page.url(), resultado: "descargado" });
-          return finishWith({ status: "OBTENIDO", filePath, detail: "Obtenido por el agente." }, resumen);
+          return finishWith({ status: "OBTENIDO", filePath, detail: "Obtenido por el agente." }, resumen, null);
         }
         await save(`${dir}/final.png`, await page.screenshot({ fullPage: true }).catch(() => new Uint8Array()));
         steps.push({ paso: n, herramienta: name, argumentos: args, url: page.url(), resultado: String(args.resultado ?? "sin descarga") });
         if (args.resultado === "enviado_por_correo") {
           const detail = `Solicitado: llegará a ${process.env.COMPANY_EMAIL}. ${resumen}`.slice(0, 500);
-          return finishWith({ status: "REQUIERE_ACCION", detail }, resumen);
+          return finishWith({ status: "REQUIERE_ACCION", detail }, resumen, null);
         }
-        return finishWith({ status: "REQUIERE_ACCION", detail: `Agente: ${resumen}`.slice(0, 500) }, resumen);
+        // Dijo "obtenido" pero no hubo descarga: lo tratamos como ruta incompleta para reintentar.
+        const motivo = args.resultado === "obtenido" ? "ruta_no_encontrada" : toMotivo(args.motivo);
+        return finishWith({ status: "REQUIERE_ACCION", detail: `Agente: ${resumen}`.slice(0, 500) }, resumen, motivo);
       }
 
       let result: string;
       let image: string | null = null;
+      const previousPage = lastPage;
       try {
         const before = downloads.length;
         await act(page, name, args);
@@ -155,18 +185,34 @@ export async function runExplorerAgent(doc: AgentDocument, { property, save, log
         }
         const downloaded = downloads.length > before ? `\nSe descargó el archivo "${downloads.at(-1)!.suggestedFilename()}".` : "";
         result = (await describe(page)) + downloaded;
+        lastPage = result;
       } catch (e) {
         result = `Error: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}\n\n${await describe(page).catch(() => "")}`;
       }
-      steps.push({ paso: n, herramienta: name, argumentos: args, url: page.url(), resultado: result.slice(0, 200) });
+      const elemento = typeof args.id === "string" ? labelOf(previousPage, args.id) : undefined;
+      steps.push({ paso: n, herramienta: name, argumentos: args, elemento, url: page.url(), resultado: result.slice(0, 200) });
       compact(messages);
       messages.push({ role: "tool", tool_call_id: call.id, content: result });
       if (image) messages.push({ role: "user", content: [{ type: "image_url", image_url: { url: image } }] });
     }
-    return finishWith({ status: "REQUIERE_ACCION", detail: `El agente no terminó en ${MAX_STEPS} pasos.` }, "Sin terminar");
+    return finishWith({ status: "REQUIERE_ACCION", detail: `El agente no terminó en ${MAX_STEPS} pasos.` }, `Se le acabaron los ${MAX_STEPS} pasos sin terminar.`, "otro");
   } finally {
     await browser.close();
   }
+}
+
+function manual(detail: string): AgentOutcome {
+  return { result: { status: "REQUIERE_ACCION", detail }, motivo: null, resumen: detail, steps: [] };
+}
+
+function toMotivo(value: unknown): Motivo {
+  return MOTIVOS.includes(value as Motivo) ? (value as Motivo) : "otro";
+}
+
+/** Busca en la última lista de elementos la línea del id usado ("[0.3] button \"Buscar\""). */
+function labelOf(pageText: string, id: string): string | undefined {
+  const line = pageText.split("\n").find((l) => l.startsWith(`[${id}] `));
+  return line?.slice(id.length + 3);
 }
 
 /** Datos de nuestra empresa para los sitios que piden quién solicita (se configuran en el .env). */

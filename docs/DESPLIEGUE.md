@@ -24,14 +24,21 @@ La web nunca ejecuta conectores en producción (`WORKER_INLINE=false`): solo cre
 
 ## 3. Motor en Cloud Run (Santiago)
 
-Requiere un proyecto de Google Cloud con facturación y la CLI `gcloud`.
+Requiere un proyecto de Google Cloud con facturación y la CLI `gcloud` con sesión iniciada (`gcloud auth login`).
+
+Desde Windows, en la carpeta del proyecto, un script hace todo lo de abajo tomando las variables del `.env`:
+```
+powershell -ExecutionPolicy Bypass -File scripts\desplegar-motor.ps1 -Proyecto <proyecto>
+```
+
+A mano:
 
 ```
 gcloud config set project <proyecto>
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 gcloud artifacts repositories create sp2 --repository-format=docker --location=southamerica-west1
 gcloud builds submit --config cloudbuild.worker.yaml --substitutions=_IMAGE=southamerica-west1-docker.pkg.dev/<proyecto>/sp2/motor
-gcloud run deploy sp2-motor --image southamerica-west1-docker.pkg.dev/<proyecto>/sp2/motor --region southamerica-west1 --no-allow-unauthenticated --no-cpu-throttling --min-instances 1 --max-instances 1 --memory 2Gi --env-vars-file motor.env.yaml
+gcloud run deploy sp2-motor --image southamerica-west1-docker.pkg.dev/<proyecto>/sp2/motor --region southamerica-west1 --no-allow-unauthenticated --no-cpu-throttling --min-instances 1 --max-instances 1 --cpu 2 --memory 4Gi --env-vars-file motor.env.yaml
 ```
 
 `motor.env.yaml` (no subirlo al repo):
@@ -43,6 +50,12 @@ SUPABASE_SERVICE_ROLE_KEY: "..."
 SUPABASE_BUCKET: "documentos"
 APP_URL: "https://<tu-app>.vercel.app"
 EMAIL_PROVIDER: "console"
+OPENROUTER_API_KEY: "..."          # agente de IA para documentos sin conector
+OPENROUTER_MODEL: "anthropic/claude-haiku-5.5"
+COMPANY_NAME: "SmartProp"          # datos del solicitante en los formularios
+COMPANY_RUT: "78.031.812-0"
+COMPANY_EMAIL: "documentos@smartprop.io"
+WORKER_CONCURRENCY: "3"
 ```
 
 `--no-cpu-throttling` y `--min-instances 1` mantienen el motor siempre despierto leyendo la cola.
