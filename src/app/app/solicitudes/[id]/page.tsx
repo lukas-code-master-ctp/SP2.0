@@ -5,6 +5,7 @@ import { formatCLP } from "@/lib/money";
 import { ArrowRight, Download, FileText, Sparkles } from "lucide-react";
 import { ItemStatusBadge, RequestStatusBadge } from "@/components/StatusBadge";
 import { SuccessCheck } from "@/components/motion/SuccessCheck";
+import { summarize, summarizeEvent } from "@/lib/summary";
 import { Steps } from "@/components/Steps";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { SubmitButton } from "@/components/ui";
@@ -83,7 +84,7 @@ export default async function RequestDetail({
                   ) : (
                     <span className="font-medium text-brand-900">{i.documentType.name}</span>
                   )}
-                  {i.detail && <p className="mt-0.5 text-xs text-slate-500">{i.detail}</p>}
+                  {i.detail && <p className="mt-0.5 text-xs text-slate-500">{summarize(i.detail)}</p>}
                 </div>
                 <ItemStatusBadge status={i.status} />
               </li>
@@ -125,7 +126,7 @@ export default async function RequestDetail({
                     className={`absolute -left-[26px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${idx === 0 ? "bg-brand-500" : "bg-cloud"}`}
                     aria-hidden
                   />
-                  <p className="text-slate-700">{e.message}</p>
+                  <p className="break-words text-slate-700">{summarizeEvent(e.message)}</p>
                   <p className="text-xs text-slate-500">{e.createdAt.toLocaleString("es-CL")}</p>
                 </li>
               ))}
