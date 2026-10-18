@@ -89,6 +89,17 @@ export function NewRequestForm({ procedures, regions }: Props) {
         <Field label="Año" name="inscripcionAnio" placeholder="2015" inputMode="numeric" error={e?.inscripcionAnio} />
       </section>
 
+      <section className="card grid gap-4 sm:grid-cols-3">
+        <div className="sm:col-span-3">
+          <h2 className="font-semibold">Propietario (opcional)</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Algunos certificados, como el de matrimonio, se piden con el RUN del propietario. Si no lo tienes, los
+            gestionamos nosotros.
+          </p>
+        </div>
+        <Field label="RUN del propietario" name="propietarioRun" placeholder="12.345.678-9" error={e?.propietarioRun} />
+      </section>
+
       <div className="flex justify-end">
         <SubmitButton>Ver documentos requeridos →</SubmitButton>
       </div>
