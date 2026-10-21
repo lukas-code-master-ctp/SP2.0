@@ -53,4 +53,4 @@ if (-not $existe) {
   }
 }
 Write-Host "`nListo: desde ahora cada cambio del motor fusionado en main se despliega solo." -ForegroundColor Green
-Write-Host "Puedes ver cada despliegue en https://console.cloud.google.com/cloud-build/builds;region=$region?project=$Proyecto"
+Write-Host "Puedes ver cada despliegue en https://console.cloud.google.com/cloud-build/builds;region=${region}?project=${Proyecto}"
