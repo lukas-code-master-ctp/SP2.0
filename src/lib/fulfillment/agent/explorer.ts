@@ -16,6 +16,7 @@ const MAX_ELEMENTS = 120;
 
 // Pistas de por dónde empezar. Son orientativas: el agente puede buscar si no le sirven.
 const START_HINTS: Record<string, string> = {
+  DEUDA_CONTRIBUCIONES: "Lo emite la Tesorería en tgr.gob.cl (https://tgr.gob.cl/certificado-deuda-contribuciones/); el sitio antiguo www.tgr.cl ya no tiene el trámite.",
   NO_EXPROPIACION_SERVIU: "Lo emite el SERVIU de la región; en la Región Metropolitana es SERVIU Metropolitano (serviurm.cl).",
   DEUDA_ASEO: "Lo emite la municipalidad de la comuna (para Las Condes, lascondes.cl).",
   MATRIMONIO: "Lo emite el Registro Civil (registrocivil.cl). Necesita el RUN del propietario.",
