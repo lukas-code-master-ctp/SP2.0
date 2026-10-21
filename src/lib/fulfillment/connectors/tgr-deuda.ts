@@ -17,18 +17,29 @@ export const tgrDeuda: Connector = {
       return { status: "REQUIERE_ACCION", detail: "Falta instalar el navegador automático (npx playwright install chromium)." };
     }
 
+    const proxy = proxyFor("DEUDA_CONTRIBUCIONES");
     let browser: import("playwright").Browser;
     try {
       browser = await playwright.chromium.launch({
         headless: process.env.CONNECTORS_HEADLESS !== "false",
         executablePath: process.env.CHROMIUM_PATH || undefined,
-        proxy: proxyFor("DEUDA_CONTRIBUCIONES"),
+        proxy,
       });
     } catch {
       return { status: "REQUIERE_ACCION", detail: "Falta instalar el navegador automático (npx playwright install chromium)." };
     }
     try {
       const page = await browser.newPage({ locale: "es-CL", viewport: { width: 1280, height: 900 } });
+      // Deja en el log por dónde sale el navegador (sin credenciales), para distinguir un bloqueo de un proxy mal cargado.
+      if (!proxy) log("Sin proxy: PROXY_CL_URL no está cargado en el motor.");
+      else {
+        // Se abre en el navegador (no con page.request) para que pase por el mismo proxy que el trámite.
+        const salida = await page
+          .goto("https://ipinfo.io/json", { timeout: 20_000 })
+          .then(async () => { const j = JSON.parse(await page.innerText("body")); return `IP ${j.ip} (${j.country}, ${j.org})`; })
+          .catch((e: Error) => `no pude ver la IP (${e.message.split("\n")[0]})`);
+        log(`Saliendo por proxy ${new globalThis.URL(proxy.server).host}: ${salida}`);
+      }
       log(`Abriendo ${URL}`);
       // "networkidle" nunca llega en tgr.cl (scripts que siguen cargando), así que esperamos el HTML y un margen fijo.
       await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
