@@ -31,6 +31,13 @@ Desde Windows, en la carpeta del proyecto, un script hace todo lo de abajo toman
 powershell -ExecutionPolicy Bypass -File scripts\desplegar-motor.ps1 -Proyecto <proyecto>
 ```
 
+Después, para que el motor se despliegue solo al fusionar en `main` (se hace una vez): conectar GitHub en la consola
+de Cloud Build (región southamerica-west1, Repositorios 2ª gen, vincular `SP2.0`) y correr
+`scripts\activar-autodespliegue.ps1 -Proyecto <proyecto>`. Crea el disparador `sp2-motor-main` con `cloudbuild.motor.yaml`,
+que cambia solo la imagen: las variables quedan como las dejó `desplegar-motor.ps1`, así que si cambia el `.env`
+hay que volver a correr ese script. Las rutas que aprende el agente viven en la base (`AgentMemory`) y no
+necesitan despliegue.
+
 A mano:
 
 ```

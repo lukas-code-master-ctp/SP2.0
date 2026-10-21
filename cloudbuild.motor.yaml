@@ -1,0 +1,19 @@
+# Despliegue automático del motor: lo corre el disparador "sp2-motor-main" de Cloud Build en cada push a main
+# (ver scripts/activar-autodespliegue.ps1). Construye la imagen, la sube y la pone en sp2-motor.
+# Las variables del servicio (.env) se mantienen: solo cambia la imagen.
+steps:
+  - id: construir
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "Dockerfile.worker", "-t", "${_IMAGE}:${SHORT_SHA}", "-t", "${_IMAGE}:latest", "."]
+  - id: subir
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "--all-tags", "${_IMAGE}"]
+  - id: desplegar
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args: ["run", "deploy", "sp2-motor", "--image", "${_IMAGE}:${SHORT_SHA}", "--region", "${LOCATION}", "--quiet"]
+substitutions:
+  _IMAGE: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/sp2/motor
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
