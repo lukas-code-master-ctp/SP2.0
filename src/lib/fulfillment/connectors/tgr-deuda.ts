@@ -1,11 +1,13 @@
+import { contextOptions } from "../browser";
 import { proxyFor } from "../proxy";
 import type { Connector } from "../types";
 
 // TGR bloquea IPs de datacenter (también Cloud Run Santiago): en la nube sale por el proxy chileno (ver proxy.ts).
 // Etapa actual: abre el trámite con un navegador real y guarda captura y HTML para grabar la ruta exacta
 // (formulario, captcha, descarga). Cuando la ruta esté grabada, este conector descargará el certificado.
-// La TGR se mudó a tgr.gob.cl: la ruta antigua de www.tgr.cl responde "Página no encontrada" incluso desde Chile.
-const URL = "https://tgr.gob.cl/certificado-deuda-contribuciones/";
+// www.tgr.cl redirige aquí. Ojo: a un navegador que se anuncia como "HeadlessChrome" la TGR le responde
+// "Página no encontrada" o "AccessDenied"; por eso el User-Agent de contextOptions.
+const URL = "https://tgr.gob.cl/tramites-tgr/certificado-de-deuda-de-contribuciones/";
 
 export const tgrDeuda: Connector = {
   documentCode: "DEUDA_CONTRIBUCIONES",
@@ -30,7 +32,7 @@ export const tgrDeuda: Connector = {
       return { status: "REQUIERE_ACCION", detail: "Falta instalar el navegador automático (npx playwright install chromium)." };
     }
     try {
-      const page = await browser.newPage({ locale: "es-CL", viewport: { width: 1280, height: 900 } });
+      const page = await browser.newPage(contextOptions(browser));
       // Deja en el log por dónde sale el navegador (sin credenciales), para distinguir un bloqueo de un proxy mal cargado.
       if (!proxy) log("Sin proxy: PROXY_CL_URL no está cargado en el motor.");
       else {
@@ -55,8 +57,8 @@ export const tgrDeuda: Connector = {
       );
       await save("_exploracion/tgr-1-enlaces.txt", `${page.url()}\n${title}\n\n${links.join("\n")}`);
 
-      if (/no encontrada|no existe/i.test(title)) {
-        return { status: "REQUIERE_ACCION", detail: "La TGR no mostró el trámite (página no encontrada)." };
+      if (!title || /no encontrada|no existe/i.test(title)) {
+        return { status: "REQUIERE_ACCION", detail: "La TGR no mostró el trámite (página no encontrada o acceso denegado)." };
       }
       return { status: "REQUIERE_ACCION", detail: "Ruta de la TGR en grabación: guardamos la página del trámite para automatizarla." };
     } finally {
