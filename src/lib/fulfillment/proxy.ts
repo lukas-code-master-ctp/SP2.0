@@ -1,7 +1,8 @@
-// Algunos emisores (TGR) rechazan IPs de datacenter y de fuera de Chile. Para esos documentos el navegador
-// sale por un proxy residencial chileno: PROXY_CL_URL=http://usuario:clave@host:puerto. El resto va directo,
-// así el proxy (que se paga por GB) solo se usa donde hace falta.
-const DEFAULT_DOCS = ["DEUDA_CONTRIBUCIONES"];
+// Para un emisor que rechace IPs de datacenter o de fuera de Chile, el navegador puede salir por un proxy
+// residencial chileno: PROXY_CL_URL=http://usuario:clave@host:puerto y PROXY_CL_DOCS=CODIGO1,CODIGO2.
+// Por defecto nada usa el proxy (se paga por GB): la TGR, que parecía bloquear IPs, en realidad rechazaba
+// el User-Agent "HeadlessChrome" (ver browser.ts).
+const DEFAULT_DOCS: string[] = [];
 
 export function proxyFor(documentCode: string): { server: string; username?: string; password?: string } | undefined {
   const raw = process.env.PROXY_CL_URL;
