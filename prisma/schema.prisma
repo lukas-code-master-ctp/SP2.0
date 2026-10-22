@@ -165,6 +165,7 @@ model Request {
   total             Int           @default(0)
   status            RequestStatus @default(BORRADOR)
   folderPath        String? // carpeta donde se guardan los documentos
+  deletedAt         DateTime? // eliminada por el cliente: deja de mostrarse y el motor la ignora
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
