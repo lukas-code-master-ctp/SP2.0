@@ -108,6 +108,7 @@ async function runJob(job: Job) {
     predio,
     comuna: request.comuna.name,
     region: request.comuna.region.name,
+    regionId: request.comuna.region.id,
     foja: request.foja,
     inscripcionNumero: request.inscripcionNumero,
     inscripcionAnio: request.inscripcionAnio,

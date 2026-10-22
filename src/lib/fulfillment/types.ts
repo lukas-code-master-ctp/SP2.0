@@ -5,6 +5,8 @@ export type PropertyRef = {
   predio: string;
   comuna: string;
   region: string;
+  /** Número oficial de la región (13 = Metropolitana), igual que Region.id. */
+  regionId: number;
   foja: string | null;
   inscripcionNumero: string | null;
   inscripcionAnio: number | null;

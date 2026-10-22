@@ -4,7 +4,7 @@
 |---|---|---|
 | Web (Next.js) | Vercel, región São Paulo (`gru1`) | Cerca de la base de datos |
 | Base de datos y documentos | Supabase, región São Paulo (`sa-east-1`) | Postgres + almacenamiento privado |
-| Motor de obtención (`npm run worker`) | Google Cloud Run, Santiago (`southamerica-west1`) | TGR y otros sitios del Estado bloquean IPs extranjeras; los conectores usan un navegador y tardan minutos |
+| Motor de obtención (`npm run worker`) | Google Cloud Run, Santiago (`southamerica-west1`) | Los conectores usan un navegador y tardan minutos; algunos sitios del Estado podrían bloquear IPs extranjeras |
 
 La web nunca ejecuta conectores en producción (`WORKER_INLINE=false`): solo crea trabajos en la tabla `Job`. El motor los toma con `FOR UPDATE SKIP LOCKED`, así que se puede escalar a varias instancias.
 
@@ -67,9 +67,9 @@ WORKER_CONCURRENCY: "3"
 
 `--no-cpu-throttling` y `--min-instances 1` mantienen el motor siempre despierto leyendo la cola.
 
-### Prueba pendiente
+### TGR
 
-No está verificado que la TGR acepte conexiones desde un datacenter en Chile. Tras desplegar, crear una solicitud con deuda de contribuciones y revisar en Supabase Storage la captura `solicitudes/<n>/_exploracion/tgr-1.png`. Si muestra "Página no encontrada", el plan B es correr el mismo contenedor (o `npm run worker`) en un VPS chileno o un equipo en la oficina: solo necesita las variables de arriba.
+La TGR acepta conexiones desde datacenters, incluso fuera de Chile, pero rechaza navegadores que se anuncian como "HeadlessChrome" ("Página no encontrada" o "AccessDenied"). Por eso todos los navegadores del motor usan el User-Agent de Chrome de escritorio (`src/lib/fulfillment/browser.ts`). El formulario tiene un reCAPTCHA invisible; si Google llega a pedir el de casilla, el documento queda en "Requiere acción". Si algún emisor bloquea IPs, el proxy chileno se activa por documento con `PROXY_CL_URL` y `PROXY_CL_DOCS`.
 
 ## Local
 
