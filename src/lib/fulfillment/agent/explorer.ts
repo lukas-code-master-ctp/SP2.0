@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { Browser, Download, Frame, Page } from "playwright";
 import { cleanRut } from "../../rut";
+import { contextOptions } from "../browser";
 import { proxyFor } from "../proxy";
 import type { ConnectorContext, ConnectorResult } from "../types";
 
@@ -16,7 +17,7 @@ const MAX_ELEMENTS = 120;
 
 // Pistas de por dónde empezar. Son orientativas: el agente puede buscar si no le sirven.
 const START_HINTS: Record<string, string> = {
-  DEUDA_CONTRIBUCIONES: "Lo emite la Tesorería en tgr.gob.cl (https://tgr.gob.cl/certificado-deuda-contribuciones/); el sitio antiguo www.tgr.cl ya no tiene el trámite.",
+  DEUDA_CONTRIBUCIONES: "Lo emite la Tesorería (TGR): el trámite está en https://tgr.gob.cl/tramites-tgr/certificado-de-deuda-de-contribuciones/.",
   NO_EXPROPIACION_SERVIU: "Lo emite el SERVIU de la región; en la Región Metropolitana es SERVIU Metropolitano (serviurm.cl).",
   DEUDA_ASEO: "Lo emite la municipalidad de la comuna (para Las Condes, lascondes.cl).",
   MATRIMONIO: "Lo emite el Registro Civil (registrocivil.cl). Necesita el RUN del propietario.",
@@ -117,7 +118,7 @@ export async function runExplorerAgent(
   let lastPage = "";
 
   try {
-    const context = await browser.newContext({ locale: "es-CL", viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+    const context = await browser.newContext({ ...contextOptions(browser), acceptDownloads: true });
     const downloads: Download[] = [];
     let page: Page;
     // Los sitios del Estado abren trámites en pestañas nuevas: el agente sigue siempre la última.
