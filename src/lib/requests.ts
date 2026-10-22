@@ -36,7 +36,7 @@ export async function getOwnedRequest(requestId: string, userId: string) {
       payments: { orderBy: { createdAt: "desc" } },
     },
   });
-  if (!request || request.userId !== userId) notFound();
+  if (!request || request.userId !== userId || request.deletedAt) notFound();
   return request;
 }
 

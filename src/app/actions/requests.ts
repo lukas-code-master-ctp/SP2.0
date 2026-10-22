@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -144,4 +145,27 @@ export async function checkout(_: FormState, formData: FormData): Promise<FormSt
   });
   await prisma.payment.update({ where: { id: payment.id }, data: { externalId } });
   redirect(redirectUrl);
+}
+
+/**
+ * Elimina una solicitud del cliente. Se marca como eliminada (no se borra) para no reutilizar su número ni su
+ * carpeta, y se cancela: el motor descarta sus trabajos pendientes y no toma más documentos de ella.
+ */
+export async function deleteRequest(formData: FormData): Promise<void> {
+  const user = await requireOnboardedUser();
+  const request = await getOwnedRequest(String(formData.get("requestId") ?? ""), user.id);
+
+  await prisma.$transaction([
+    prisma.request.update({ where: { id: request.id }, data: { deletedAt: new Date(), status: "CANCELADA" } }),
+    prisma.job.updateMany({
+      where: { requestId: request.id, status: { in: ["PENDIENTE", "EN_CURSO"] } },
+      data: { status: "LISTO", lockedAt: null, lastError: "Solicitud eliminada por el cliente" },
+    }),
+    prisma.requestEvent.create({
+      data: { requestId: request.id, type: "ELIMINADA", message: "Solicitud eliminada por el cliente." },
+    }),
+  ]);
+
+  revalidatePath("/app");
+  redirect("/app");
 }

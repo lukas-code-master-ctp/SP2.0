@@ -10,6 +10,7 @@ import { Steps } from "@/components/Steps";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { SubmitButton } from "@/components/ui";
 import { retryFulfillment } from "@/app/actions/fulfillment";
+import { DeleteRequestButton } from "@/components/DeleteRequestButton";
 
 export default async function RequestDetail({
   params,
@@ -55,7 +56,10 @@ export default async function RequestDetail({
             Rol {r.rol}, {r.comuna.name}, {r.comuna.region.name}
           </p>
         </div>
-        <RequestStatusBadge status={r.status} />
+        <div className="flex flex-col items-end gap-2">
+          <RequestStatusBadge status={r.status} />
+          <DeleteRequestButton requestId={r.id} number={r.number} fetching={fetching} />
+        </div>
       </div>
 
       {!paidOrLater && r.status !== "CANCELADA" && (
