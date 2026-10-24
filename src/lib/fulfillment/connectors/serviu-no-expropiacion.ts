@@ -116,15 +116,21 @@ export const serviuNoExpropiacion: Connector = {
           .catch(() => false);
       }
       if (!ready) throw new Error(`El SERVIU no generó el certificado de la solicitud ${ids[1]} a tiempo`);
-      // "Ver certificado" abre el PDF en una pestaña nueva.
-      const [pdfPage] = await Promise.all([
-        context.waitForEvent("page", { timeout: SLOW_MS }),
+      // "Ver certificado" abre el PDF en una pestaña nueva. En el motor (Chromium sin visor de PDF) esa pestaña no
+      // queda en la URL del PDF sino que lo descarga: por eso se toma la respuesta del PDF, venga como venga.
+      const [pdfResponse] = await Promise.all([
+        context.waitForEvent("response", {
+          predicate: (r) => /application\/pdf/i.test(r.headers()["content-type"] ?? "") || /\.pdf($|\?)/i.test(r.url()),
+          timeout: SLOW_MS,
+        }),
         certs.click("#dgAgrupacion_btnGenerarCertificado_0", { noWaitAfter: true }),
       ]);
-      await pdfPage.waitForURL(/\.pdf/i, { timeout: SLOW_MS });
-      const res = await context.request.get(pdfPage.url(), { timeout: 60_000 });
-      const pdf = Buffer.from(await res.body());
-      if (pdf.subarray(0, 5).toString() !== "%PDF-") throw new Error("El SERVIU devolvió un certificado que no es PDF");
+      // Si se descargó, el navegador no guarda el contenido: se vuelve a pedir con la misma sesión.
+      const direct = await pdfResponse.body().catch(() => null);
+      const pdf = Buffer.from(
+        direct && isPdf(direct) ? direct : await (await context.request.get(pdfResponse.url(), { timeout: 60_000 })).body(),
+      );
+      if (!isPdf(pdf)) throw new Error("El SERVIU devolvió un certificado que no es PDF");
       const filePath = await save("serviu-no-expropiacion.pdf", pdf);
       log("Certificado SERVIU obtenido");
       return { status: "OBTENIDO", filePath, detail: "Certificado de no expropiación oficial (MINVU)." };
@@ -133,3 +139,7 @@ export const serviuNoExpropiacion: Connector = {
     }
   },
 };
+
+function isPdf(data: Buffer): boolean {
+  return data.subarray(0, 5).toString() === "%PDF-";
+}

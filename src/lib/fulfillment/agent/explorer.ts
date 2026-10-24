@@ -16,6 +16,8 @@ const PAGE_TEXT_LIMIT = 6_000;
 const MAX_ELEMENTS = 120;
 const FRAME_TIMEOUT_MS = 5_000;
 const MODEL_TIMEOUT_MS = 120_000;
+const model = () => process.env.OPENROUTER_MODEL ?? "anthropic/claude-haiku-5.5";
+const captchaModel = () => process.env.OPENROUTER_CAPTCHA_MODEL ?? "anthropic/claude-opus-5.5";
 // Veces seguidas que se deja repetir la misma acción con los mismos datos antes de frenar al agente.
 const MAX_REPEATS = 3;
 // Veces en total (seguidas o no) que se deja repetir la misma acción en una corrida.
@@ -31,7 +33,7 @@ const START_HINTS: Record<string, string> = {
     "Lo emite la municipalidad de la comuna. Para Las Condes:",
     "1. Abre https://www.lascondesonline.cl/aseo/PagoRecolecciondeResiduos/asp/Paginicio.asp",
     "2. En \"Rut\" escribe el RUN del propietario con guion (por ejemplo 12345678-9).",
-    "3. Resuelve el captcha \"No soy un robot\" y aprieta INGRESAR.",
+    "3. Resuelve el captcha \"No soy un robot\" y aprieta INGRESAR. En cada desafío elige las casillas y aprieta VERIFY antes de decidir que no pudiste.",
     "4. Busca la deuda o el comprobante de la propiedad (el rol) y descárgalo o imprímelo a PDF.",
     "Sin RUN del propietario no se puede: termina con requiere_accion (motivo falta_dato).",
   ].join("\n"),
@@ -178,7 +180,11 @@ export async function runExplorerAgent(
     let repeats = 0;
     const totals = new Map<string, number>();
     for (let n = 1; n <= MAX_STEPS; n++) {
-      const call = await nextToolCall(apiKey, messages);
+      // El desafío de imágenes es difícil para el modelo liviano: mientras está en pantalla decide uno más capaz.
+      const captcha = lastPage.includes('td "casilla 1 de');
+      const call = captcha
+        ? await nextToolCall(apiKey, messages, captchaModel()).catch(() => nextToolCall(apiKey, messages))
+        : await nextToolCall(apiKey, messages);
       messages.push({ role: "assistant", content: null, tool_calls: [call] });
       const name = call.function.name;
       const args = safeJson(call.function.arguments);
@@ -306,12 +312,12 @@ function requester(): string | null {
   return lines.join("\n");
 }
 
-async function nextToolCall(apiKey: string, messages: Message[]): Promise<ToolCall> {
+async function nextToolCall(apiKey: string, messages: Message[], modelId = model()): Promise<ToolCall> {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: process.env.OPENROUTER_MODEL ?? "anthropic/claude-haiku-5.5",
+      model: modelId,
       messages,
       tools: TOOLS,
       tool_choice: "required",
@@ -406,12 +412,19 @@ const MARK_SCRIPT = `(() => {
     const target = ref ? document.getElementById(ref.split(" ")[0]) : null;
     return target ? target.innerText : "";
   };
+  // Casillas sin <label> (p. ej. el carro del Registro Civil, donde todas se llaman "cert1"): se rotulan con el texto de su fila.
+  const rowText = (el) => {
+    if (el.type !== "checkbox" && el.type !== "radio") return "";
+    if (el.labels && el.labels.length) return el.labels[0].innerText;
+    const row = el.closest("tr, li");
+    return row ? row.innerText : "";
+  };
   // Las casillas del desafío de imágenes de reCAPTCHA no tienen texto: se numeran para que el agente las distinga.
   const tiles = [...document.querySelectorAll("td.rc-imageselect-tile")];
   const elements = nodes.map((el, i) => {
     el.setAttribute("data-agente", String(i));
     const tile = tiles.indexOf(el);
-    const label = tile >= 0 ? "casilla " + (tile + 1) + " de " + tiles.length : (el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || labelledBy(el) || el.title || el.name || "").trim().replace(/\\s+/g, " ").slice(0, 80);
+    const label = tile >= 0 ? "casilla " + (tile + 1) + " de " + tiles.length : (rowText(el) || el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || labelledBy(el) || el.title || el.name || "").trim().replace(/\\s+/g, " ").slice(0, 80);
     const kind = el.tagName === "INPUT" ? "input " + el.type : el.tagName.toLowerCase();
     const extra = el.tagName === "A" ? " -> " + el.href.slice(0, 100) : el.tagName === "SELECT" ? " opciones: " + [...el.options].map((o) => o.text).slice(0, 15).join(" | ") : "";
     return i + "] " + kind + ' "' + label + '"' + extra;
