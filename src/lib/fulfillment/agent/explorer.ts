@@ -316,7 +316,7 @@ async function nextToolCall(apiKey: string, messages: Message[]): Promise<ToolCa
   return call;
 }
 
-async function act(page: Page, name: string, args: Record<string, unknown>) {
+export async function act(page: Page, name: string, args: Record<string, unknown>) {
   switch (name) {
     case "abrir":
       await page.goto(String(args.url), { waitUntil: "domcontentloaded", timeout: 45_000 });
@@ -359,7 +359,7 @@ function element(page: Page, id: string) {
 }
 
 /** Texto visible y elementos interactivos numerados de la página (incluidos los iframes). */
-async function describe(page: Page): Promise<string> {
+export async function describe(page: Page): Promise<string> {
   const parts = [`URL: ${page.url()}`, `Título: ${await page.title().catch(() => "")}`];
   const frames = page.frames();
   for (let f = 0; f < frames.length; f++) {
