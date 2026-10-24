@@ -175,7 +175,7 @@ async function obtain(
 ): Promise<ConnectorResult> {
   if (fixed) {
     try {
-      const result = await withTimeout(fixed.obtain(ctx), CONNECTOR_TIMEOUT_MS);
+      const result = await withTimeout(fixed.obtain(ctx), fixed.timeoutMs ?? CONNECTOR_TIMEOUT_MS);
       if (result.status === "OBTENIDO" || !agentDoc) return result;
       ctx.log(`El conector fijo no lo logró (${result.detail}); entra el agente.`);
     } catch (e) {

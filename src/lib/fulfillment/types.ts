@@ -29,6 +29,8 @@ export type Connector = {
   /** Código del DocumentType que resuelve. */
   documentCode: string;
   name: string;
+  /** Tope de tiempo del intento; por defecto el del motor. Para sitios lentos (el SERVIU tarda minutos). */
+  timeoutMs?: number;
   /** Lanza un error si falla de forma reintentable (sitio caído, timeout, respuesta inesperada). */
   obtain: (ctx: ConnectorContext) => Promise<ConnectorResult>;
 };

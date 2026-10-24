@@ -14,6 +14,8 @@ const SLOW_MS = 180_000;
 export const serviuNoExpropiacion: Connector = {
   documentCode: "NO_EXPROPIACION_SERVIU",
   name: "MINVU · Certificado de no expropiación",
+  // Tres pasos de hasta un minuto cada uno, más la espera a que se genere el certificado.
+  timeoutMs: 10 * 60_000,
   async obtain({ property, save, log }) {
     const { COMPANY_RUT, COMPANY_EMAIL, COMPANY_NAME } = process.env;
     if (!COMPANY_RUT || !COMPANY_EMAIL) {

@@ -9,6 +9,11 @@ describe("summarize", () => {
     const sii = "Ficha con los datos públicos del SII. El certificado detallado oficial requiere la clave del propietario.";
     expect(summarize(sii)).toBe(sii);
   });
+  it("explica cuando el emisor no tiene registro para ese RUN", () => {
+    expect(summarize(`Agente: El Registro Civil indicó que el RUN ingresado no cumplen los requisitos para el certificado. ${"Detalle. ".repeat(12)}`)).toBe(
+      "El emisor no tiene registro para ese RUN (por ejemplo, sin matrimonio inscrito).",
+    );
+  });
   it("resume captchas", () => {
     expect(summarize(`Agente: El sitio del Registro Civil muestra un captcha de imagen ("¿Cuál es el código?") que no se pudo resolver. ${"Pasos para una persona. ".repeat(6)}`)).toBe(
       "El sitio pide un captcha; lo completa nuestro equipo.",

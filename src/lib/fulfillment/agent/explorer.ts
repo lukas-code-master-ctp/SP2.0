@@ -35,7 +35,7 @@ const START_HINTS: Record<string, string> = {
     '2. Despliega "Matrimonio" y marca "Certificado de Matrimonio Todo tramite sin Inscripciones".',
     '3. En el campo RUN que aparece escribe el RUN del propietario (sin puntos ni guion) y aprieta "Agregar al Carro".',
     '4. Si aparece "¿Cuál es el código de la imagen?", toma una captura, lee el código y escríbelo en ese campo.',
-    '5. Si dice "los datos ingresados no cumplen los requisitos", el propietario no tiene matrimonio inscrito con ese RUN: termina con requiere_accion (motivo otro) y dilo en el resumen.',
+    '5. Si dice "los datos ingresados no cumplen los requisitos", el propietario no tiene matrimonio inscrito con ese RUN: termina con requiere_accion (motivo no_aplica) y dilo en el resumen.',
     "6. En el carro completa los datos del solicitante (RUN y número de documento de nuestro representante, correo) y sigue hasta emitir o descargar el certificado.",
     "Sin RUN del propietario no se puede: termina con requiere_accion (motivo falta_dato).",
   ].join("\n"),
@@ -54,7 +54,7 @@ Reglas:
 - Cuando descargues el certificado, termina con "obtenido". Sé eficiente: tienes un máximo de ${MAX_STEPS} pasos.
 Responde siempre llamando a una herramienta.`;
 
-export const MOTIVOS = ["falta_dato", "login_o_pago", "captcha", "sitio_caido", "ruta_no_encontrada", "otro"] as const;
+export const MOTIVOS = ["falta_dato", "login_o_pago", "captcha", "sitio_caido", "ruta_no_encontrada", "no_aplica", "otro"] as const;
 export type Motivo = (typeof MOTIVOS)[number];
 
 const TOOLS = [
@@ -76,7 +76,8 @@ const TOOLS = [
     motivo: {
       type: "string",
       enum: MOTIVOS,
-      description: "Si no lo obtuviste, por qué: falta_dato, login_o_pago, captcha, sitio_caido (error o caída del sitio), ruta_no_encontrada u otro.",
+      description:
+        "Si no lo obtuviste, por qué: falta_dato, login_o_pago, captcha, sitio_caido (error o caída del sitio), ruta_no_encontrada, no_aplica (el emisor dice que no existe ese registro para estos datos) u otro.",
     },
     resumen: { type: "string", description: "Qué pasó y, si falta algo, los pasos exactos para una persona." },
   }, ["resultado", "resumen"]),
