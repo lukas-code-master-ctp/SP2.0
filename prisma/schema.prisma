@@ -37,6 +37,7 @@ enum ItemStatus {
   OBTENIDO
   REQUIERE_ACCION // falta un dato, hay captcha o aún no hay conector: lo resuelve una persona
   FALLIDO
+  NO_APLICA // el emisor no tiene ese registro (p. ej., el propietario no tiene matrimonio inscrito)
 }
 
 enum PaymentStatus {

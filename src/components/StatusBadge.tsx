@@ -1,5 +1,5 @@
 import type { ItemStatus, RequestStatus } from "@prisma/client";
-import { CircleCheck, Clock, Eye, LoaderCircle, RefreshCw, CircleX, CreditCard, FileText, Sparkles } from "lucide-react";
+import { CircleCheck, CircleMinus, Clock, Eye, LoaderCircle, RefreshCw, CircleX, CreditCard, FileText, Sparkles } from "lucide-react";
 import { ITEM_STATUS_LABEL, REQUEST_STATUS_LABEL } from "@/lib/labels";
 import { cx } from "@/lib/cx";
 
@@ -17,6 +17,7 @@ const ITEM = {
   OBTENIDO: { tone: "success", icon: CircleCheck },
   REQUIERE_ACCION: { tone: "info", icon: Eye },
   FALLIDO: { tone: "warning", icon: RefreshCw },
+  NO_APLICA: { tone: "neutral", icon: CircleMinus },
 } as const;
 
 const REQUEST = {

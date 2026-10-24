@@ -15,5 +15,6 @@ export const ITEM_STATUS_LABEL: Record<ItemStatus, string> = {
   OBTENIENDO: "Obteniendo",
   OBTENIDO: "Obtenido",
   REQUIERE_ACCION: "En revisión",
+  NO_APLICA: "No aplica",
   FALLIDO: "Reintentando",
 };

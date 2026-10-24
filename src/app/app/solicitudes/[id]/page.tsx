@@ -71,7 +71,8 @@ export default async function RequestDetail({
           <div className="flex items-center justify-between border-b border-cloud px-5 py-4 sm:px-6">
             <h3 className="font-semibold text-brand-900">Documentos</h3>
             <span className="text-xs tabular-nums text-slate-500">
-              {selectedItems.filter((i) => i.status === "OBTENIDO").length} de {selectedItems.length} obtenidos
+              {selectedItems.filter((i) => i.status === "OBTENIDO").length} de{" "}
+              {selectedItems.filter((i) => i.status !== "NO_APLICA").length} obtenidos
             </span>
           </div>
           <ul className="divide-y divide-cloud">
