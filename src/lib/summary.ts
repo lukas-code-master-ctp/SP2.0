@@ -5,6 +5,8 @@
  */
 const RULES: [RegExp, string][] = [
   [/^Solicitado: llegará a/i, "Solicitado; el certificado llegará por correo."],
+  // El Registro Civil responde así cuando el RUN no tiene el registro pedido (p. ej., sin matrimonio inscrito).
+  [/no cumplen los requisitos/i, "El emisor no tiene registro para ese RUN (por ejemplo, sin matrimonio inscrito)."],
   [/captcha|no soy un robot/i, "El sitio pide un captcha; lo completa nuestro equipo."],
   [/clave ?única|iniciar sesión|login|contraseña/i, "El sitio pide iniciar sesión; lo gestiona nuestro equipo."],
   [/sitio ca[ií]do|no responde|timeout|tiempo agotado|ERR_|net::/i, "El sitio del emisor no respondió."],
