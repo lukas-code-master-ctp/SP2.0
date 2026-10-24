@@ -207,6 +207,7 @@ export async function runExplorerAgent(
         }
         // Dijo "obtenido" pero no hubo descarga: lo tratamos como ruta incompleta para reintentar.
         const motivo = args.resultado === "obtenido" ? "ruta_no_encontrada" : toMotivo(args.motivo);
+        if (motivo === "no_aplica") return finishWith({ status: "NO_APLICA", detail: resumen.slice(0, 500) }, resumen, motivo);
         return finishWith({ status: "REQUIERE_ACCION", detail: `Agente: ${resumen}`.slice(0, 500) }, resumen, motivo);
       }
 

@@ -33,7 +33,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export async function startFulfillment(requestId: string): Promise<void> {
   const request = await prisma.request.findUniqueOrThrow({
     where: { id: requestId },
-    include: { items: { where: { selected: true, status: { not: "OBTENIDO" } } } },
+    include: { items: { where: { selected: true, status: { notIn: ["OBTENIDO", "NO_APLICA"] } } } },
   });
   if (!["PAGADA", "EN_PROCESO"].includes(request.status)) return;
 
@@ -83,7 +83,7 @@ async function runJob(job: Job) {
     include: { documentType: true, request: { include: { user: true, comuna: { include: { region: true } } } } },
   });
   const { request, documentType } = item;
-  if (item.status === "OBTENIDO" || request.status !== "EN_PROCESO") {
+  if (item.status === "OBTENIDO" || item.status === "NO_APLICA" || request.status !== "EN_PROCESO") {
     await completeJob(job.id);
     return;
   }
@@ -145,7 +145,7 @@ async function runJob(job: Job) {
     return;
   }
 
-  log(result.status === "OBTENIDO" ? "Obtenido." : `Requiere acción: ${result.detail ?? ""}`);
+  log(result.status === "OBTENIDO" ? "Obtenido." : `${result.status === "NO_APLICA" ? "No aplica" : "Requiere acción"}: ${result.detail ?? ""}`);
   await prisma.requestItem.update({
     where: { id: item.id },
     data: {
@@ -157,7 +157,7 @@ async function runJob(job: Job) {
   });
   await event(
     request.id,
-    result.status === "OBTENIDO" ? "DOCUMENTO_OBTENIDO" : "DOCUMENTO_REQUIERE_ACCION",
+    result.status === "OBTENIDO" ? "DOCUMENTO_OBTENIDO" : result.status === "NO_APLICA" ? "DOCUMENTO_NO_APLICA" : "DOCUMENTO_REQUIERE_ACCION",
     result.status === "OBTENIDO" ? `${documentType.name}: obtenido.` : `${documentType.name}: ${result.detail}`,
   );
   await completeJob(job.id);
@@ -188,7 +188,8 @@ async function obtain(
 
 async function finishIfComplete(requestId: string, email: string, number: number) {
   const items = await prisma.requestItem.findMany({ where: { requestId, selected: true }, select: { status: true } });
-  if (!items.every((i) => i.status === "OBTENIDO")) return;
+  // Un documento que no aplica (p. ej., sin matrimonio inscrito) no deja la solicitud pendiente.
+  if (!items.every((i) => i.status === "OBTENIDO" || i.status === "NO_APLICA")) return;
   // El informe (OpenRouter) se conecta después; por ahora la solicitud queda lista con los documentos.
   const { count } = await prisma.request.updateMany({
     where: { id: requestId, status: "EN_PROCESO" },

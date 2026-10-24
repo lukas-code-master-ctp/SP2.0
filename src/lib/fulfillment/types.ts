@@ -23,7 +23,9 @@ export type ConnectorContext = {
 export type ConnectorResult =
   | { status: "OBTENIDO"; filePath: string; detail?: string }
   // Falta un dato, hay captcha o la ruta aún no está grabada: queda para revisión humana.
-  | { status: "REQUIERE_ACCION"; detail: string };
+  | { status: "REQUIERE_ACCION"; detail: string }
+  // El emisor no tiene ese registro para estos datos (p. ej., sin matrimonio inscrito): no hay nada que obtener.
+  | { status: "NO_APLICA"; detail: string };
 
 export type Connector = {
   /** Código del DocumentType que resuelve. */
