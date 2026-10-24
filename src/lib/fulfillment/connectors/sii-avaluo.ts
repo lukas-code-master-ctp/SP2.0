@@ -1,42 +1,51 @@
-import { buildSheetPdf } from "../pdf";
 import type { Connector } from "../types";
 
-// Visor de Mapas del SII (https://www4.sii.cl/mapasui/internet/): API JSON pública, sin clave ni captcha.
-const BASE = "https://www4.sii.cl/mapasui/services/data/mapasFacadeService/";
-const NAMESPACE = "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/";
+// "Consulta certificados de avalúo" del SII (https://www2.sii.cl/vicana/Menu/ConsultarAntecedentesSC):
+// la página llama a una API JSON pública, sin clave ni captcha (el campo token va en blanco), que devuelve el
+// Certificado de Avalúo Fiscal oficial en PDF (base64), con folio y código de verificación.
+// El certificado "detallado" sigue requiriendo la clave del propietario; este es el simple.
+const BASE = "https://www2.sii.cl/app/vicana/v1/";
+const HEADERS = {
+  "Content-Type": "application/json",
+  Accept: "application/json, text/plain, */*",
+  Origin: "https://www2.sii.cl",
+  Referer: "https://www2.sii.cl/vicana/Menu/ConsultarAntecedentesSC",
+};
+const ATTEMPTS = 3;
 
-type SiiComuna = { codigo: string; nombre: string };
-type SiiPredio = {
+type SiiComuna = { codigoConaraSii: number; nombre: string };
+type SiiBienRaiz = {
+  comunaCnp: number;
+  manzanaCnp: number;
+  predioCnp: number;
+  ultimoEacAplicado: number;
+  comuna: string;
   rol: string;
-  nombreComuna: string;
   direccion: string | null;
-  destinoDescripcion: string | null;
-  ubicacion: string | null;
-  periodo: string | null;
-  existePredio: number;
-  valorTotal: number | null;
-  valorAfecto: number | null;
-  valorExento: number | null;
-  supTerreno: number | null;
-  supConsMt2: number | null;
-  eacsDescripcion: string | null;
+  destino: string | null;
+  avaluoFiscal: number | null;
+  rutdv: string | null;
 };
 
-async function call<T>(operation: string, data?: unknown): Promise<T> {
-  const body: Record<string, unknown> = {
-    metaData: { namespace: NAMESPACE + operation, conversationId: "UNAUTHENTICATED-CALL", transactionId: crypto.randomUUID() },
-  };
-  if (data !== undefined) body.data = data;
-  const res = await fetch(BASE + operation, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Referer: "https://www4.sii.cl/mapasui/internet/" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) throw new Error(`SII ${operation} respondió ${res.status}`);
-  const json = (await res.json()) as { data: T; metaData?: { errors?: unknown } };
-  if (json.metaData?.errors) throw new Error(`SII ${operation} devolvió errores: ${JSON.stringify(json.metaData.errors)}`);
-  return json.data;
+/** POST a la API; reintenta los errores pasajeros del SII ("Ocurrio un error técnico, reintente nuevamente"). */
+async function call<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(BASE + path, {
+        method: "POST",
+        headers: HEADERS,
+        body: JSON.stringify({ token: " ", ...body }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) throw new Error(`SII ${path} respondió ${res.status}`);
+      const text = await res.text();
+      // El certificado llega como base64 sin comillas aunque diga application/json.
+      return (/^\s*[[{"]/.test(text) ? JSON.parse(text) : text) as T;
+    } catch (e) {
+      if (attempt >= ATTEMPTS) throw e;
+      await new Promise((r) => setTimeout(r, 3_000 * attempt));
+    }
+  }
 }
 
 export function normalizeName(name: string): string {
@@ -45,60 +54,49 @@ export function normalizeName(name: string): string {
 
 let comunasCache: SiiComuna[] | null = null;
 
-async function siiComunaCode(comuna: string): Promise<string | null> {
-  comunasCache ??= await call<SiiComuna[]>("listComunas");
+async function siiComunaCode(comuna: string): Promise<number | null> {
+  comunasCache ??= await call<SiiComuna[]>("comuna/obtener/todas", { action: "llenarComuna" });
   const target = normalizeName(comuna);
-  return comunasCache.find((c) => normalizeName(c.nombre) === target)?.codigo ?? null;
+  return comunasCache.find((c) => normalizeName(c.nombre) === target)?.codigoConaraSii ?? null;
 }
-
-const clp = (n: number | null) => (n == null ? "-" : `$${n.toLocaleString("es-CL")}`);
-const m2 = (n: number | null) => (n ? `${n.toLocaleString("es-CL")} m²` : "Sin información");
 
 export const siiAvaluo: Connector = {
   documentCode: "AVALUO_DETALLADO",
-  name: "SII · Mapas (avalúo fiscal por rol)",
+  name: "SII · Certificado de avalúo fiscal",
   async obtain({ property, save, log }) {
     const code = await siiComunaCode(property.comuna);
     if (!code) return { status: "REQUIERE_ACCION", detail: `El SII no reconoce la comuna "${property.comuna}".` };
 
     log(`Consultando SII: comuna ${code}, manzana ${property.manzana}, predio ${property.predio}`);
-    const predio = await call<SiiPredio | null>("getPredioNacional", {
-      predio: { comuna: code, manzana: property.manzana, predio: property.predio },
-      servicios: [],
-    });
-    if (!predio || predio.existePredio !== 1) {
+    const rol = { comunaCnp: code, manzanaCnp: Number(property.manzana), predioCnp: Number(property.predio) };
+    const [bien] = await call<SiiBienRaiz[]>("bienes-raices/buscar/por-rol", { action: "BusquedaSC", bienesRaices: rol });
+    if (!bien) {
       return { status: "REQUIERE_ACCION", detail: `El SII no encontró el rol ${property.rol} en ${property.comuna}. Revisa el rol.` };
     }
+    // Incluye el RUT del propietario (rutdv), que sirve para otros trámites.
+    await save("sii-avaluo.json", JSON.stringify({ consultedAt: new Date(), bien }, null, 2));
 
-    const consultedAt = new Date();
-    await save("sii-avaluo.json", JSON.stringify({ consultedAt, source: BASE + "getPredioNacional", predio }, null, 2));
-    const pdf = await buildSheetPdf(
-      "Ficha de avalúo fiscal",
-      `Fuente: SII, visor de Mapas · consultado el ${consultedAt.toLocaleString("es-CL", { timeZone: "America/Santiago" })}`,
-      [
-        ["Rol", predio.rol],
-        ["Comuna", predio.nombreComuna],
-        ["Dirección", predio.direccion ?? "-"],
-        ["Destino", predio.destinoDescripcion ?? "-"],
-        ["Ubicación", predio.ubicacion ?? "-"],
-        ["Avalúo total", clp(predio.valorTotal)],
-        ["Avalúo afecto", clp(predio.valorAfecto)],
-        ["Avalúo exento", clp(predio.valorExento)],
-        ["Superficie terreno", m2(predio.supTerreno)],
-        ["Superficie construida", m2(predio.supConsMt2)],
-        ["Período", predio.periodo ?? "-"],
-        ["Reavalúo", predio.eacsDescripcion ?? "-"],
-      ],
-      [
-        "Datos públicos del visor de Mapas del Servicio de Impuestos Internos. Información referencial según el propio SII.",
-        "No reemplaza el certificado de avalúo fiscal detallado, que se emite con la clave tributaria del propietario.",
-      ],
-    );
+    const b64 = await call<string>("cert-avaluo-fiscal/obtener/simple", {
+      action: "GeneraCertificados",
+      certificado: {
+        tipoDocumento: "1", // Certificado de Avalúo Fiscal Simple
+        tipoSolicitante: "2",
+        tipoSolicitud: "3",
+        motivo: "Estudio de títulos de la propiedad",
+        institucionReceptor: "3", // Conservador
+        otraInstitucion: "",
+        correoReceptor: "",
+        bienesRaices: [{ ...rol, ultimoEacAplicado: bien.ultimoEacAplicado }],
+      },
+    });
+    const pdf = Buffer.from(b64, "base64");
+    if (pdf.subarray(0, 5).toString() !== "%PDF-") throw new Error("El SII devolvió un certificado que no es PDF");
     const filePath = await save("sii-avaluo.pdf", pdf);
+    log(`Certificado SII obtenido: ${bien.direccion ?? "-"}, avalúo $${(bien.avaluoFiscal ?? 0).toLocaleString("es-CL")}`);
     return {
       status: "OBTENIDO",
       filePath,
-      detail: "Ficha con los datos públicos del SII. El certificado detallado oficial requiere la clave del propietario.",
+      detail: "Certificado de avalúo fiscal oficial (simple). El detallado requiere la clave del propietario.",
     };
   },
 };

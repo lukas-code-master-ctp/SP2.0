@@ -10,3 +10,4 @@ prisma/*.db-journal
 storage/
 coverage/
 motor.env.yaml
+logs-*.txt

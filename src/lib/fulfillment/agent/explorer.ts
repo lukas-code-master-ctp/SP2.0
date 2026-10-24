@@ -14,6 +14,8 @@ export type AgentDocument = { code: string; name: string; description: string; i
 const MAX_STEPS = 40;
 const PAGE_TEXT_LIMIT = 6_000;
 const MAX_ELEMENTS = 120;
+const FRAME_TIMEOUT_MS = 5_000;
+const MODEL_TIMEOUT_MS = 120_000;
 
 // Pistas de por dónde empezar. Son orientativas: el agente puede buscar si no le sirven.
 const START_HINTS: Record<string, string> = {
@@ -221,17 +223,27 @@ function labelOf(pageText: string, id: string): string | undefined {
 
 /** Datos de nuestra empresa para los sitios que piden quién solicita (se configuran en el .env). */
 function requester(): string | null {
-  const { COMPANY_NAME, COMPANY_RUT, COMPANY_EMAIL } = process.env;
+  const { COMPANY_NAME, COMPANY_RUT, COMPANY_EMAIL, COMPANY_REP_NAME, COMPANY_REP_RUN } = process.env;
   if (!COMPANY_RUT || !COMPANY_EMAIL) return null;
-  const rut = cleanRut(COMPANY_RUT);
-  return [
+  // Los formularios del Estado suelen pedir el número y el dígito verificador por separado y sin puntos.
+  const split = (value: string) => {
+    const clean = cleanRut(value);
+    return `número sin puntos: ${clean.slice(0, -1)}, dígito verificador: ${clean.slice(-1)}`;
+  };
+  const lines = [
     `Nombre o institución: ${COMPANY_NAME || "-"}`,
     `Si piden la institución a la que se presentará o destinataria del certificado, usa también "${COMPANY_NAME || "-"}".`,
-    // Los formularios del Estado suelen pedir el número y el dígito verificador por separado y sin puntos.
-    `RUT: ${COMPANY_RUT} (número sin puntos: ${rut.slice(0, -1)}, dígito verificador: ${rut.slice(-1)}). Escríbelo en el formato que pida cada campo.`,
+    `RUT: ${COMPANY_RUT} (${split(COMPANY_RUT)}). Escríbelo en el formato que pida cada campo.`,
     "Es una empresa (persona jurídica): si el formulario tiene una casilla o opción de empresa, márcala antes de ingresar el RUT.",
     `Correo: ${COMPANY_EMAIL}`,
-  ].join("\n");
+  ];
+  // Hay sitios (SERVIU) que validan el RUN contra el Registro Civil y rechazan el RUT de una empresa.
+  if (COMPANY_REP_NAME && COMPANY_REP_RUN) {
+    lines.push(
+      `Si el sitio solo acepta una persona natural o rechaza el RUT de la empresa, usa a nuestro representante: ${COMPANY_REP_NAME}, RUN ${COMPANY_REP_RUN} (${split(COMPANY_REP_RUN)}).`,
+    );
+  }
+  return lines.join("\n");
 }
 
 async function nextToolCall(apiKey: string, messages: Message[]): Promise<ToolCall> {
@@ -244,6 +256,7 @@ async function nextToolCall(apiKey: string, messages: Message[]): Promise<ToolCa
       tools: TOOLS,
       tool_choice: "required",
     }),
+    signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`OpenRouter respondió ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = (await res.json()) as { choices: { message: { tool_calls?: ToolCall[] } }[] };
@@ -323,8 +336,12 @@ const MARK_SCRIPT = `(() => {
   return { text, elements };
 })()`;
 
+// Algunos iframes (p. ej. en registrocivil.cl) nunca responden: sin tope, el agente quedaba colgado para siempre.
 function markFrame(frame: Frame) {
-  return frame.evaluate<{ text: string; elements: string[] }>(MARK_SCRIPT);
+  return Promise.race([
+    frame.evaluate<{ text: string; elements: string[] }>(MARK_SCRIPT),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("el marco no respondió")), FRAME_TIMEOUT_MS)),
+  ]);
 }
 
 // Mantiene corto el historial: solo el último estado de página va completo.
