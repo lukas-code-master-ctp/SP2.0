@@ -18,11 +18,14 @@ const FRAME_TIMEOUT_MS = 5_000;
 const MODEL_TIMEOUT_MS = 120_000;
 // Veces seguidas que se deja repetir la misma acción con los mismos datos antes de frenar al agente.
 const MAX_REPEATS = 3;
+// Veces en total (seguidas o no) que se deja repetir la misma acción en una corrida.
+const MAX_TOTAL_REPEATS = 5;
 
 // Pistas de por dónde empezar. Son orientativas: el agente puede buscar si no le sirven.
 const START_HINTS: Record<string, string> = {
   DEUDA_CONTRIBUCIONES: "Lo emite la Tesorería (TGR): el trámite está en https://tgr.gob.cl/tramites-tgr/certificado-de-deuda-de-contribuciones/.",
-  NO_EXPROPIACION_SERVIU: "Lo emite el SERVIU de la región; en la Región Metropolitana es SERVIU Metropolitano (serviurm.cl).",
+  NO_EXPROPIACION_SERVIU:
+    "Se pide en https://cne.minvu.cl/Public/IngresarSolicitud.aspx (gratis, acepta RUT de empresa). Cada paso tarda hasta un minuto: usa capturas para esperar en vez de repetir clics. Al final, en la lista de solicitudes, usa \"Listar Certificados\" de la más nueva y luego el ícono \"Ver Certificado\", que abre el PDF. No ingreses otra solicitud si ya hay una \"Certificada\" de este rol: descarga esa.",
   DEUDA_ASEO: "Lo emite la municipalidad de la comuna (para Las Condes, lascondes.cl).",
   // El carro de certificados va embebido en registrocivil.cl, pero se abre bien directo. Al agregar al carro, el
   // firewall del sitio muestra en una ventana un código de imagen: se lee con una captura y se escribe.
@@ -164,15 +167,16 @@ export async function runExplorerAgent(
 
     let lastAction = "";
     let repeats = 0;
+    const totals = new Map<string, number>();
     for (let n = 1; n <= MAX_STEPS; n++) {
       const call = await nextToolCall(apiKey, messages);
       messages.push({ role: "assistant", content: null, tool_calls: [call] });
       const name = call.function.name;
       const args = safeJson(call.function.arguments);
-      log(`Agente paso ${n}: ${name} ${JSON.stringify(args)}`);
+      log(`Agente paso ${n}: ${name} ${redact(JSON.stringify(args))}`);
 
       if (name === "terminar") {
-        const resumen = String(args.resumen ?? "");
+        const resumen = redact(String(args.resumen ?? ""));
         const download = downloads.at(-1);
         if (args.resultado === "obtenido" && download) {
           const ext = (download.suggestedFilename().split(".").pop() || "pdf").toLowerCase();
@@ -195,12 +199,13 @@ export async function runExplorerAgent(
       const action = `${name} ${JSON.stringify(args)}`;
       repeats = action === lastAction ? repeats + 1 : 1;
       lastAction = action;
-      if (repeats > MAX_REPEATS) {
+      totals.set(action, (totals.get(action) ?? 0) + 1);
+      if (repeats > MAX_REPEATS || totals.get(action)! > MAX_TOTAL_REPEATS) {
         steps.push({ paso: n, herramienta: name, argumentos: args, url: page.url(), resultado: "repetido, no se ejecutó" });
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: `No lo ejecuté: ya hiciste exactamente esto ${MAX_REPEATS} veces seguidas sin avanzar. Haz otra cosa (una captura, otro elemento u otra URL) o termina.`,
+          content: `No lo ejecuté: ya hiciste exactamente esto demasiadas veces sin avanzar. Haz otra cosa (una captura, otro elemento u otra URL) o termina.`,
         });
         continue;
       }
@@ -234,6 +239,21 @@ export async function runExplorerAgent(
   } finally {
     await browser.close();
   }
+}
+
+/** Oculta el RUN y el número de documento del representante en logs y resúmenes (son datos personales). */
+export function redact(text: string): string {
+  let out = text;
+  // Del RUN basta el número sin dígito verificador: el modelo lo escribe a veces sin él.
+  const run = process.env.COMPANY_REP_RUN ? cleanRut(process.env.COMPANY_REP_RUN).slice(0, -1) : "";
+  const doc = process.env.COMPANY_REP_DOC ? cleanRut(process.env.COMPANY_REP_DOC) : "";
+  for (const digits of [run, doc]) {
+    if (digits.length < 6) continue;
+    // Calza el valor con o sin puntos y guion (19.892.611-6, 198926116, 19892611-6).
+    const pattern = new RegExp(digits.split("").join("[.\\s]?") + "(?:-?[0-9kK])?", "gi");
+    out = out.replace(pattern, "[dato del representante]");
+  }
+  return out;
 }
 
 function manual(detail: string): AgentOutcome {
@@ -301,9 +321,15 @@ async function act(page: Page, name: string, args: Record<string, unknown>) {
     case "abrir":
       await page.goto(String(args.url), { waitUntil: "domcontentloaded", timeout: 45_000 });
       return;
-    case "clic":
-      await element(page, String(args.id)).click({ timeout: 10_000 });
+    case "clic": {
+      const el = element(page, String(args.id));
+      // Casillas decoradas (iCheck y similares) tapan el input con otra capa: se hace clic en ese punto igual.
+      await el.click({ timeout: 10_000 }).catch((e: Error) => {
+        if (!/intercepts pointer events/.test(e.message)) throw e;
+        return el.click({ force: true, timeout: 10_000 });
+      });
       return;
+    }
     case "escribir": {
       const el = element(page, String(args.id));
       await el.fill(String(args.texto), { timeout: 10_000 });
@@ -325,7 +351,8 @@ async function act(page: Page, name: string, args: Record<string, unknown>) {
 
 // Ids "marco.índice": los trámites del Estado suelen ir dentro de iframes.
 function element(page: Page, id: string) {
-  const [frameIndex, index] = id.split(".");
+  // El modelo a veces copia el id con los corchetes de la lista ("[0.3]").
+  const [frameIndex, index] = id.replace(/[[\]\s]/g, "").split(".");
   const frame = page.frames()[Number(frameIndex)];
   if (!frame || index === undefined) throw new Error(`No existe el elemento ${id}; usa un id de la última lista.`);
   return frame.locator(`[data-agente="${index}"]`).first();
@@ -353,8 +380,16 @@ const MARK_SCRIPT = `(() => {
     const s = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
   };
-  const nodes = [...document.querySelectorAll("a[href], button, input:not([type=hidden]), select, textarea, [role=button]")]
+  const standard = "a[href], button, input:not([type=hidden]), select, textarea, [role=button]";
+  // Menús hechos con divs y JavaScript (p. ej. el carro del Registro Civil): se reconocen por el cursor de mano.
+  const pointer = [...document.querySelectorAll("div, span, li, td, label")].filter((el) =>
+    getComputedStyle(el).cursor === "pointer" &&
+    !(el.parentElement && getComputedStyle(el.parentElement).cursor === "pointer") &&
+    !el.closest(standard) && !el.querySelector(standard) &&
+    (el.innerText || "").trim().length > 0 && (el.innerText || "").trim().length <= 80);
+  const nodes = [...document.querySelectorAll(standard), ...pointer]
     .filter(visible)
+    .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
     .slice(0, max);
   const elements = nodes.map((el, i) => {
     el.setAttribute("data-agente", String(i));
