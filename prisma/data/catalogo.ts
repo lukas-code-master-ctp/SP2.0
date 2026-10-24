@@ -101,7 +101,8 @@ export const DOCUMENTOS: DocSeed[] = [
     name: "Certificado de posesión efectiva",
     description: "Necesario si la propiedad proviene de una herencia.",
     issuer: "Registro Civil",
-    price: 0,
+    // El Registro Civil lo cobra en su carro de certificados (pide el RUN del causante).
+    price: 1250,
   },
   {
     code: "PLANO_ARCHIVADO",
