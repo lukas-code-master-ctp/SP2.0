@@ -16,13 +16,26 @@ const PAGE_TEXT_LIMIT = 6_000;
 const MAX_ELEMENTS = 120;
 const FRAME_TIMEOUT_MS = 5_000;
 const MODEL_TIMEOUT_MS = 120_000;
+// Veces seguidas que se deja repetir la misma acción con los mismos datos antes de frenar al agente.
+const MAX_REPEATS = 3;
 
 // Pistas de por dónde empezar. Son orientativas: el agente puede buscar si no le sirven.
 const START_HINTS: Record<string, string> = {
   DEUDA_CONTRIBUCIONES: "Lo emite la Tesorería (TGR): el trámite está en https://tgr.gob.cl/tramites-tgr/certificado-de-deuda-de-contribuciones/.",
   NO_EXPROPIACION_SERVIU: "Lo emite el SERVIU de la región; en la Región Metropolitana es SERVIU Metropolitano (serviurm.cl).",
   DEUDA_ASEO: "Lo emite la municipalidad de la comuna (para Las Condes, lascondes.cl).",
-  MATRIMONIO: "Lo emite el Registro Civil (registrocivil.cl). Necesita el RUN del propietario.",
+  // El carro de certificados va embebido en registrocivil.cl, pero se abre bien directo. Al agregar al carro, el
+  // firewall del sitio muestra en una ventana un código de imagen: se lee con una captura y se escribe.
+  MATRIMONIO: [
+    "Es gratis y lo emite el Registro Civil. Ruta probada:",
+    "1. Abre https://www.registrocivil.cl/OficinaInternet/web/carro.srcei (puede tardar unos segundos en cargar).",
+    '2. Despliega "Matrimonio" y marca "Certificado de Matrimonio Todo tramite sin Inscripciones".',
+    '3. En el campo RUN que aparece escribe el RUN del propietario (sin puntos ni guion) y aprieta "Agregar al Carro".',
+    '4. Si aparece "¿Cuál es el código de la imagen?", toma una captura, lee el código y escríbelo en ese campo.',
+    '5. Si dice "los datos ingresados no cumplen los requisitos", el propietario no tiene matrimonio inscrito con ese RUN: termina con requiere_accion (motivo otro) y dilo en el resumen.',
+    "6. En el carro completa los datos del solicitante (RUN y número de documento de nuestro representante, correo) y sigue hasta emitir o descargar el certificado.",
+    "Sin RUN del propietario no se puede: termina con requiere_accion (motivo falta_dato).",
+  ].join("\n"),
   POSESION_EFECTIVA: "Lo emite el Registro Civil (registrocivil.cl).",
 };
 
@@ -149,6 +162,8 @@ export async function runExplorerAgent(
       },
     ];
 
+    let lastAction = "";
+    let repeats = 0;
     for (let n = 1; n <= MAX_STEPS; n++) {
       const call = await nextToolCall(apiKey, messages);
       messages.push({ role: "assistant", content: null, tool_calls: [call] });
@@ -174,6 +189,20 @@ export async function runExplorerAgent(
         // Dijo "obtenido" pero no hubo descarga: lo tratamos como ruta incompleta para reintentar.
         const motivo = args.resultado === "obtenido" ? "ruta_no_encontrada" : toMotivo(args.motivo);
         return finishWith({ status: "REQUIERE_ACCION", detail: `Agente: ${resumen}`.slice(0, 500) }, resumen, motivo);
+      }
+
+      // Freno a los bucles: en una prueba el agente apretó 30 veces el mismo botón sin que la página cambiara.
+      const action = `${name} ${JSON.stringify(args)}`;
+      repeats = action === lastAction ? repeats + 1 : 1;
+      lastAction = action;
+      if (repeats > MAX_REPEATS) {
+        steps.push({ paso: n, herramienta: name, argumentos: args, url: page.url(), resultado: "repetido, no se ejecutó" });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: `No lo ejecuté: ya hiciste exactamente esto ${MAX_REPEATS} veces seguidas sin avanzar. Haz otra cosa (una captura, otro elemento u otra URL) o termina.`,
+        });
+        continue;
       }
 
       let result: string;
@@ -223,7 +252,7 @@ function labelOf(pageText: string, id: string): string | undefined {
 
 /** Datos de nuestra empresa para los sitios que piden quién solicita (se configuran en el .env). */
 function requester(): string | null {
-  const { COMPANY_NAME, COMPANY_RUT, COMPANY_EMAIL, COMPANY_REP_NAME, COMPANY_REP_RUN } = process.env;
+  const { COMPANY_NAME, COMPANY_RUT, COMPANY_EMAIL, COMPANY_REP_NAME, COMPANY_REP_RUN, COMPANY_REP_DOC } = process.env;
   if (!COMPANY_RUT || !COMPANY_EMAIL) return null;
   // Los formularios del Estado suelen pedir el número y el dígito verificador por separado y sin puntos.
   const split = (value: string) => {
@@ -242,6 +271,8 @@ function requester(): string | null {
     lines.push(
       `Si el sitio solo acepta una persona natural o rechaza el RUT de la empresa, usa a nuestro representante: ${COMPANY_REP_NAME}, RUN ${COMPANY_REP_RUN} (${split(COMPANY_REP_RUN)}).`,
     );
+    // El Registro Civil pide además el número de documento (serie) de la cédula de quien solicita.
+    if (COMPANY_REP_DOC) lines.push(`Número de documento (serie) de la cédula del representante: ${COMPANY_REP_DOC}.`);
   }
   return lines.join("\n");
 }
