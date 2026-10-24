@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db";
 import type { ConnectorContext, ConnectorResult } from "../types";
-import { runExplorerAgent, type AgentDocument, type AgentOutcome, type Motivo, type Step } from "./explorer";
+import { runExplorerAgent, type AgentDocument, type AgentOutcome, type Motivo } from "./explorer";
+import { canReplay, replayRecipe, type Recipe } from "./replay";
 
 // Autoarreglo: el agente recuerda por documento la última ruta que funcionó y por qué fallaron los últimos
 // intentos. Si un intento falla por algo que el agente puede corregir (no encontró la ruta, se perdió), lo
@@ -12,18 +13,32 @@ const MAX_LESSONS = 5;
 const RETRY_NOW: Motivo[] = ["ruta_no_encontrada", "otro"];
 
 type Lesson = { fecha: string; motivo: Motivo; resumen: string };
-type Recipe = { pasos: Pick<Step, "herramienta" | "argumentos" | "elemento" | "url">[] };
 
 export class SiteDownError extends Error {}
 
 export async function obtainWithAgent(doc: AgentDocument, ctx: ConnectorContext): Promise<ConnectorResult> {
+  // Si ya hay una ruta que terminó en descarga, primero se repite sin IA; solo si no calza entra el agente.
+  const memory = await prisma.agentMemory.findUnique({ where: { documentCode: doc.code } });
+  const recipe = memory?.recipe as Recipe | null | undefined;
+  if (canReplay(recipe)) {
+    ctx.log("Repitiendo la ruta grabada, sin IA.");
+    const replayed = await replayRecipe(doc.code, recipe, ctx).catch((e) => {
+      ctx.log(`Repetición: ${e instanceof Error ? e.message.split("\n")[0] : e}; entra el agente.`);
+      return null;
+    });
+    if (replayed) {
+      await prisma.agentMemory.update({ where: { documentCode: doc.code }, data: { successes: { increment: 1 } } });
+      return replayed;
+    }
+  }
+
   let outcome = await runExplorerAgent(doc, ctx, await guidance(doc.code));
-  await remember(doc.code, outcome);
+  await remember(doc.code, outcome, ctx);
 
   if (outcome.motivo && RETRY_NOW.includes(outcome.motivo)) {
     ctx.log("El agente no lo logró; reintenta con lo aprendido.");
     outcome = await runExplorerAgent(doc, ctx, await guidance(doc.code));
-    await remember(doc.code, outcome);
+    await remember(doc.code, outcome, ctx);
   }
   // El motor captura el error y vuelve a encolar el documento con espera.
   if (outcome.motivo === "sitio_caido") throw new SiteDownError(`Sitio caído: ${outcome.resumen}`.slice(0, 300));
@@ -56,13 +71,15 @@ function describeStep(p: Recipe["pasos"][number]): string {
   return `${p.herramienta}${p.elemento ? ` en ${p.elemento}` : ""}${args} (en ${p.url})`;
 }
 
-async function remember(documentCode: string, outcome: AgentOutcome) {
+async function remember(documentCode: string, outcome: AgentOutcome, ctx: ConnectorContext) {
   const solved = outcome.result.status === "OBTENIDO" || (outcome.motivo === null && outcome.steps.length > 0);
   if (solved) {
     const recipe: Recipe = {
       pasos: outcome.steps
         .filter((s) => s.herramienta !== "captura" && !s.resultado.startsWith("Error"))
         .map(({ herramienta, argumentos, elemento, url }) => ({ herramienta, argumentos, elemento, url })),
+      // Con qué propiedad se grabó, para cambiar sus datos por los de la próxima solicitud al repetirla.
+      propiedad: ctx.property,
     };
     const data = { recipe: recipe as unknown as Prisma.InputJsonValue, recipeAt: new Date(), lessons: [] };
     await prisma.agentMemory.upsert({
