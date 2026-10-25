@@ -215,8 +215,10 @@ export async function runExplorerAgent(
       const action = `${name} ${JSON.stringify(args)}`;
       repeats = action === lastAction ? repeats + 1 : 1;
       lastAction = action;
-      totals.set(action, (totals.get(action) ?? 0) + 1);
-      if (repeats > MAX_REPEATS || totals.get(action)! > MAX_TOTAL_REPEATS) {
+      // Las capturas no cuentan para el tope total: en el captcha de imágenes hace falta una después de cada clic, y en la
+      // 1015 el tope le negó la sexta captura y el agente se rindió sin apretar VERIFY.
+      if (name !== "captura") totals.set(action, (totals.get(action) ?? 0) + 1);
+      if (repeats > MAX_REPEATS || (totals.get(action) ?? 0) > MAX_TOTAL_REPEATS) {
         steps.push({ paso: n, herramienta: name, argumentos: args, url: page.url(), resultado: "repetido, no se ejecutó" });
         messages.push({
           role: "tool",
@@ -421,12 +423,13 @@ const MARK_SCRIPT = `(() => {
     const row = el.closest("tr, li");
     return row ? row.innerText : "";
   };
-  // Las casillas del desafío de imágenes de reCAPTCHA no tienen texto: se numeran para que el agente las distinga.
+  // Las casillas del desafío de imágenes de reCAPTCHA no tienen texto: se numeran para que el agente las distinga, y se
+  // indica cuáles ya marcó en los desafíos de 4x4 (ahí un segundo clic la desmarca).
   const tiles = [...document.querySelectorAll("td.rc-imageselect-tile")];
   const elements = nodes.map((el, i) => {
     el.setAttribute("data-agente", String(i));
     const tile = tiles.indexOf(el);
-    const label = tile >= 0 ? "casilla " + (tile + 1) + " de " + tiles.length : (rowText(el) || el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || labelledBy(el) || el.title || el.name || "").trim().replace(/\\s+/g, " ").slice(0, 80);
+    const label = tile >= 0 ? "casilla " + (tile + 1) + " de " + tiles.length + (el.classList.contains("rc-imageselect-tileselected") ? " (marcada)" : "") : (rowText(el) || el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || labelledBy(el) || el.title || el.name || "").trim().replace(/\\s+/g, " ").slice(0, 80);
     const kind = el.tagName === "INPUT" ? "input " + el.type : el.tagName.toLowerCase();
     const extra = el.tagName === "A" ? " -> " + el.href.slice(0, 100) : el.tagName === "SELECT" ? " opciones: " + [...el.options].map((o) => o.text).slice(0, 15).join(" | ") : "";
     return i + "] " + kind + ' "' + label + '"' + extra;
