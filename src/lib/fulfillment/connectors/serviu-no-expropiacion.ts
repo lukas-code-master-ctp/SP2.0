@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { cleanRut } from "../../rut";
 import { contextOptions } from "../browser";
 import { proxyFor } from "../proxy";
@@ -6,7 +7,8 @@ import { normalizeName } from "./sii-avaluo";
 
 // Certificado de No Expropiación del MINVU/SERVIU (https://cne.minvu.cl), gratis y sin captcha.
 // Paso 1: datos del solicitante (acepta el RUT de empresa marcando la casilla) y rol. Paso 2: confirma el rol.
-// Paso 3: lista de solicitudes; la nueva queda "Certificada" al tiro y su PDF se abre desde "Listar Certificados".
+// Paso 3: desde oct. 2026 va a ListaSolicitudes.aspx?idSol=…&descargar=true, que descarga el PDF al tiro y deja la
+// página en blanco. Antes mostraba la lista y el PDF se abría desde "Listar Certificados"; se deja como respaldo.
 // El sitio tarda 30 a 60 s en cada paso: el agente se cortaba antes y repetía la solicitud sin descargarla.
 const FORM = "https://cne.minvu.cl/Public/IngresarSolicitud.aspx";
 const SLOW_MS = 180_000;
@@ -88,9 +90,28 @@ export const serviuNoExpropiacion: Connector = {
       const direccion = (await page.locator("body").innerText()).match(/Direcci[oó]n:\s*(.+)/)?.[1]?.trim();
       log(`SERVIU confirmó el rol: ${direccion ?? "(sin dirección)"}`);
 
+      // Lo que llegue primero: la descarga directa (sitio actual) o la lista (sitio anterior). El que falla no resuelve.
+      const never = new Promise<never>(() => {});
+      let timer: Parameters<typeof clearTimeout>[0];
+      const outcome = Promise.race([
+        page.waitForEvent("download", { timeout: SLOW_MS }).then((d) => d, () => never),
+        // La lista viene ordenada de la más nueva a la más antigua: la fila 0 es la recién creada.
+        page.waitForSelector("#dgSolicitudes_HyperLink2_0", { timeout: SLOW_MS }).then(() => null, () => never),
+        new Promise<undefined>((resolve) => (timer = setTimeout(resolve, SLOW_MS + 5_000))),
+      ]).finally(() => clearTimeout(timer));
       await page.click("#btnContinuar", { noWaitAfter: true });
-      // La lista viene ordenada de la más nueva a la más antigua: la fila 0 es la recién creada.
-      await page.waitForSelector("#dgSolicitudes_HyperLink2_0", { timeout: SLOW_MS });
+      const first = await outcome;
+      if (first === undefined) {
+        await save("_exploracion/serviu-paso-2.png", await page.screenshot({ fullPage: true }).catch(() => Buffer.from("")));
+        throw new Error(`El SERVIU no mostró ni descargó el certificado (quedó en ${page.url()})`);
+      }
+      if (first) {
+        const pdf = await readFile(await first.path());
+        if (!isPdf(pdf)) throw new Error("El SERVIU devolvió un certificado que no es PDF");
+        const filePath = await save("serviu-no-expropiacion.pdf", pdf);
+        log("Certificado SERVIU obtenido");
+        return { status: "OBTENIDO", filePath, detail: "Certificado de no expropiación oficial (MINVU)." };
+      }
       const estado = (await page.locator("#dgSolicitudes tr").nth(1).innerText().catch(() => "")).replace(/\s+/g, " ");
       // Recién creada puede figurar "Pagada" (es gratis) unos segundos antes de quedar "Certificada".
       if (!/Certificada|Pagada/i.test(estado)) {
