@@ -17,7 +17,7 @@ const MAX_ELEMENTS = 120;
 const FRAME_TIMEOUT_MS = 5_000;
 const MODEL_TIMEOUT_MS = 120_000;
 const model = () => process.env.OPENROUTER_MODEL ?? "anthropic/claude-haiku-5.5";
-const captchaModel = () => process.env.OPENROUTER_CAPTCHA_MODEL ?? "anthropic/claude-opus-5.5";
+const captchaModel = () => process.env.OPENROUTER_CAPTCHA_MODEL ?? "moonshotai/kimi-k3.1-pro";
 // Veces seguidas que se deja repetir la misma acción con los mismos datos antes de frenar al agente.
 const MAX_REPEATS = 3;
 // Veces en total (seguidas o no) que se deja repetir la misma acción en una corrida.
