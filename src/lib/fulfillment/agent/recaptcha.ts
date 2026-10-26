@@ -85,7 +85,9 @@ async function ask(apiKey: string, question: string, png: Buffer): Promise<strin
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: visionModel(),
-      max_tokens: 5,
+      // Gemini Flash razona antes de contestar: sin bajarle el esfuerzo, con pocos tokens devuelve la respuesta vacía.
+      max_tokens: 300,
+      reasoning: { effort: "minimal" },
       messages: [
         {
           role: "user",
