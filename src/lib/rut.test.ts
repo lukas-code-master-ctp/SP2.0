@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDv, formatRut, isValidRut } from "./rut";
+import { computeDv, formatRut, isCompanyRut, isValidRut } from "./rut";
 
 describe("rut", () => {
   it("calcula el dígito verificador", () => {
@@ -12,6 +12,10 @@ describe("rut", () => {
     expect(isValidRut("123456785")).toBe(true);
     expect(isValidRut("12.345.678-K")).toBe(false);
     expect(isValidRut("")).toBe(false);
+  });
+  it("distingue empresas de personas", () => {
+    expect(isCompanyRut("78.031.812-0")).toBe(true);
+    expect(isCompanyRut("12.345.678-5")).toBe(false);
   });
   it("formatea", () => {
     expect(formatRut("123456785")).toBe("12.345.678-5");

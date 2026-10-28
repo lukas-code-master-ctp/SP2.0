@@ -32,7 +32,7 @@ const START_HINTS: Record<string, string> = {
   DEUDA_ASEO: [
     "Lo emite la municipalidad de la comuna. Para Las Condes:",
     "1. Abre https://www.lascondesonline.cl/aseo/PagoRecolecciondeResiduos/asp/Paginicio.asp",
-    "2. En \"Rut\" escribe el RUN del propietario con guion (por ejemplo 12345678-9).",
+    "2. En \"Rut\" escribe el RUN o RUT del propietario con guion (por ejemplo 12345678-9); si es una empresa, su RUT.",
     "3. Llama a resolver_captcha para el \"No soy un robot\" y, si queda resuelto, aprieta INGRESAR.",
     "4. Busca la deuda o el comprobante de la propiedad (el rol) y descárgalo o imprímelo a PDF.",
     "Sin RUN del propietario no se puede: termina con requiere_accion (motivo falta_dato).",
@@ -166,7 +166,7 @@ export async function runExplorerAgent(
       `Rol: ${property.rol} (manzana ${property.manzana}, predio ${property.predio})`,
       `Comuna: ${property.comuna}, región: ${property.region}`,
       property.foja ? `Inscripción CBR: foja ${property.foja}, número ${property.inscripcionNumero ?? "?"}, año ${property.inscripcionAnio ?? "?"}` : null,
-      property.propietarioRun ? `RUN del propietario: ${property.propietarioRun}` : null,
+      property.propietarioRun ? `RUN o RUT del propietario: ${property.propietarioRun}` : null,
     ].filter(Boolean).join("\n");
     const solicitante = requester();
     const messages: Message[] = [

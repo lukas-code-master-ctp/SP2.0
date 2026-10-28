@@ -5,6 +5,8 @@ import { requestFolder, saveFile } from "../storage";
 import { claimNextJob, completeJob, enqueueDocumentJobs, failJob, retryJobLater } from "./queue";
 import type { AgentDocument } from "./agent/explorer";
 import { obtainWithAgent, SiteDownError } from "./agent/self-heal";
+import { ownerRut } from "./connectors/sii-avaluo";
+import { isCompanyRut } from "../rut";
 import { connectorFor } from "./registry";
 import type { Connector, ConnectorContext, ConnectorResult, PropertyRef } from "./types";
 
@@ -101,6 +103,17 @@ async function runJob(job: Job) {
   }
 
   const [manzana, predio] = request.rol.split("-");
+  const log = (m: string) => console.log(`[motor #${request.number} ${documentType.code}] ${m}`);
+  // Aseo y matrimonio piden el RUT del propietario. Es opcional en el formulario: si falta, lo da el SII por el rol
+  // (en la 1016 ambos quedaron en revisión por no tenerlo). Se guarda en la solicitud para los demás documentos.
+  let propietarioRun = request.propietarioRun;
+  if (!propietarioRun) {
+    propietarioRun = await ownerRut(request.comuna.name, manzana, predio).catch(() => null);
+    if (propietarioRun) {
+      log("RUT del propietario tomado del SII.");
+      await prisma.request.update({ where: { id: request.id }, data: { propietarioRun } });
+    }
+  }
   const property: PropertyRef = {
     requestNumber: request.number,
     rol: request.rol,
@@ -112,10 +125,9 @@ async function runJob(job: Job) {
     foja: request.foja,
     inscripcionNumero: request.inscripcionNumero,
     inscripcionAnio: request.inscripcionAnio,
-    propietarioRun: request.propietarioRun,
+    propietarioRun,
   };
   const folder = request.folderPath ?? requestFolder(request.number);
-  const log = (m: string) => console.log(`[motor #${request.number} ${documentType.code}] ${m}`);
 
   await prisma.requestItem.update({
     where: { id: item.id },
@@ -125,7 +137,11 @@ async function runJob(job: Job) {
   let result: ConnectorResult;
   try {
     const ctx: ConnectorContext = { property, save: (name, content) => saveFile(folder, name, content), log };
-    result = await obtain(fixed, agent ? documentType : null, ctx);
+    // Una empresa no se casa: no tiene sentido mandar al agente al Registro Civil.
+    result =
+      documentType.code === "MATRIMONIO" && propietarioRun && isCompanyRut(propietarioRun)
+        ? { status: "NO_APLICA", detail: "El propietario es una empresa, así que no tiene certificado de matrimonio." }
+        : await obtain(fixed, agent ? documentType : null, ctx);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     log(`Error: ${message}`);

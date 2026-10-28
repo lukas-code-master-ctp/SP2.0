@@ -26,6 +26,12 @@ export function isValidRut(rut: string): boolean {
   return computeDv(body) === dv;
 }
 
+/** Persona jurídica: en Chile las empresas tienen RUT de 50.000.000 hacia arriba; las personas, menos. */
+export function isCompanyRut(rut: string): boolean {
+  const clean = cleanRut(rut);
+  return clean.length > 1 && Number(clean.slice(0, -1)) >= 50_000_000;
+}
+
 export function formatRut(rut: string): string {
   const clean = cleanRut(rut);
   if (clean.length < 2) return clean;
