@@ -130,10 +130,12 @@ export async function runExplorerAgent(
   let browser: Browser;
   try {
     playwright = await import("playwright");
+    const proxy = proxyFor(doc.code);
+    if (proxy) log(`Navegando por el proxy chileno (${proxy.server}).`);
     browser = await playwright.chromium.launch({
       headless: process.env.CONNECTORS_HEADLESS !== "false",
       executablePath: process.env.CHROMIUM_PATH || undefined,
-      proxy: proxyFor(doc.code),
+      proxy,
     });
   } catch {
     return manual("Falta instalar el navegador automático (npx playwright install chromium).");

@@ -48,7 +48,19 @@ export async function solveRecaptcha(page: Page, apiKey: string, log: (m: string
       }
       log(`Captcha: marcó ${hits.length ? hits.map((i) => i + 1).join(", ") : "ninguna"}`);
       if (!dynamic || !hits.length) break;
-      await page.waitForTimeout(4_500); // las imágenes nuevas tardan en aparecer
+      // La imagen nueva llega cuando la casilla deja de estar "dynamic-selected" (unos 4 s, más por el proxy). Antes se
+      // esperaba un tiempo fijo y a veces se volvía a mirar la imagen vieja: marcaba la misma casilla una y otra vez.
+      await challenge
+        .waitForFunction(
+          (idx) => {
+            const tds = [...document.querySelectorAll("td.rc-imageselect-tile")];
+            return idx.every((i) => tds[i] && !tds[i].classList.contains("rc-imageselect-dynamic-selected"));
+          },
+          hits,
+          { timeout: 20_000 },
+        )
+        .catch(() => {});
+      await page.waitForTimeout(1_000);
       pending = hits;
     }
 
