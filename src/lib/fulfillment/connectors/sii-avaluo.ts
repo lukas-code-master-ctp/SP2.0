@@ -60,6 +60,15 @@ async function siiComunaCode(comuna: string): Promise<number | null> {
   return comunasCache.find((c) => normalizeName(c.nombre) === target)?.codigoConaraSii ?? null;
 }
 
+/** RUT del propietario según el SII (con guion), o null si el SII no encuentra el rol. */
+export async function ownerRut(comuna: string, manzana: string, predio: string): Promise<string | null> {
+  const code = await siiComunaCode(comuna);
+  if (!code) return null;
+  const rol = { comunaCnp: code, manzanaCnp: Number(manzana), predioCnp: Number(predio) };
+  const [bien] = await call<SiiBienRaiz[]>("bienes-raices/buscar/por-rol", { action: "BusquedaSC", bienesRaices: rol });
+  return bien?.rutdv?.trim() || null;
+}
+
 export const siiAvaluo: Connector = {
   documentCode: "AVALUO_DETALLADO",
   name: "SII · Certificado de avalúo fiscal",
