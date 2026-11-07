@@ -10,9 +10,17 @@ const MAX_ROUNDS = 8;
 const DEADLINE_MS = 110_000; // el desafío caduca a los 2 minutos
 
 export async function solveRecaptcha(page: Page, apiKey: string, log: (m: string) => void): Promise<string> {
-  const anchor = page.frames().find((f) => f.url().includes("/recaptcha/api2/anchor") || f.url().includes("/recaptcha/enterprise/anchor"));
+  const result = await solve(page, apiKey, log).catch((e: Error) => `No se pudo resolver el reCAPTCHA: ${e.message.split("\n")[0]}`);
+  log(`Captcha: ${result}`);
+  return result;
+}
+
+async function solve(page: Page, apiKey: string, log: (m: string) => void): Promise<string> {
+  // Por el proxy, los marcos de Google tardan en aparecer: si se mira de inmediato, parece que no hay captcha.
+  const anchor = await waitForFrame(page, ["/recaptcha/api2/anchor", "/recaptcha/enterprise/anchor"], 15_000);
   if (!anchor) return "No hay un reCAPTCHA \"No soy un robot\" en la página.";
   if (await solved(anchor)) return "El reCAPTCHA ya está resuelto.";
+  await anchor.locator("#recaptcha-anchor").waitFor({ state: "visible", timeout: 15_000 });
   await anchor.click("#recaptcha-anchor", { timeout: 10_000 });
 
   const start = Date.now();
@@ -69,6 +77,16 @@ export async function solveRecaptcha(page: Page, apiKey: string, log: (m: string
     if (await solved(anchor)) return "reCAPTCHA resuelto.";
   }
   return "No se pudo resolver el reCAPTCHA (Google siguió pidiendo desafíos o caducó).";
+}
+
+async function waitForFrame(page: Page, needles: string[], ms: number): Promise<Frame | null> {
+  const until = Date.now() + ms;
+  do {
+    const frame = page.frames().find((f) => needles.some((n) => f.url().includes(n)));
+    if (frame) return frame;
+    await page.waitForTimeout(500);
+  } while (Date.now() < until);
+  return null;
 }
 
 function solved(anchor: Frame) {
