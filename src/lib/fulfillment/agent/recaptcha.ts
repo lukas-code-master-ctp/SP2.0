@@ -120,23 +120,24 @@ async function serviceCall<T>(clientKey: string, method: string, body: Record<st
 }
 
 // Deja el token donde lo deja Google (textarea g-recaptcha-response) y, si el sitio registró un callback, lo llama.
+// Va como texto, no como función: tsx (esbuild) envuelve las funciones internas con un ayudante __name que no existe en
+// el navegador y page.evaluate fallaba con "ReferenceError: __name is not defined" (igual que MARK_SCRIPT en explorer.ts).
 function injectToken(page: Page, token: string) {
-  return page.evaluate((tok) => {
-    document.querySelectorAll<HTMLTextAreaElement>('textarea[name="g-recaptcha-response"], #g-recaptcha-response').forEach((t) => {
+  return page.evaluate(`((tok) => {
+    document.querySelectorAll('textarea[name="g-recaptcha-response"], #g-recaptcha-response').forEach((t) => {
       t.value = tok;
       t.innerHTML = tok;
     });
     const named = document.querySelector(".g-recaptcha[data-callback]")?.getAttribute("data-callback");
-    const w = window as unknown as Record<string, unknown>;
-    if (named && typeof w[named] === "function") (w[named] as (t: string) => void)(tok);
-    const cfg = w.___grecaptcha_cfg as { clients?: Record<string, unknown> } | undefined;
-    const seen = new Set<unknown>();
-    const find = (o: unknown, depth: number): ((t: string) => void) | null => {
+    if (named && typeof window[named] === "function") window[named](tok);
+    const cfg = window.___grecaptcha_cfg;
+    const seen = new Set();
+    const find = (o, depth) => {
       if (!o || typeof o !== "object" || seen.has(o) || depth > 6) return null;
       seen.add(o);
       try {
-        for (const v of Object.values(o as Record<string, unknown>)) {
-          if (typeof v === "function" && (o as Record<string, unknown>).callback === v) return v as (t: string) => void;
+        for (const v of Object.values(o)) {
+          if (typeof v === "function" && o.callback === v) return v;
           const r = find(v, depth + 1);
           if (r) return r;
         }
@@ -145,14 +146,14 @@ function injectToken(page: Page, token: string) {
       }
       return null;
     };
-    for (const client of Object.values(cfg?.clients ?? {})) {
+    for (const client of Object.values((cfg && cfg.clients) || {})) {
       const cb = find(client, 0);
       if (cb) {
         cb(tok);
         break;
       }
     }
-  }, token);
+  })(${JSON.stringify(token)})`);
 }
 
 async function waitForFrame(page: Page, needles: string[], ms: number): Promise<Frame | null> {
