@@ -20,6 +20,7 @@ async function solve(page: Page, apiKey: string, log: (m: string) => void): Prom
   const anchor = await waitForFrame(page, ["/recaptcha/api2/anchor", "/recaptcha/enterprise/anchor"], 15_000);
   if (!anchor) return "No hay un reCAPTCHA \"No soy un robot\" en la página.";
   if (await solved(anchor)) return "El reCAPTCHA ya está resuelto.";
+  if (process.env.TWOCAPTCHA_API_KEY) return solveWithService(page, anchor, process.env.TWOCAPTCHA_API_KEY, log);
   await anchor.locator("#recaptcha-anchor").waitFor({ state: "visible", timeout: 15_000 });
   await anchor.click("#recaptcha-anchor", { timeout: 10_000 });
 
@@ -77,6 +78,81 @@ async function solve(page: Page, apiKey: string, log: (m: string) => void): Prom
     if (await solved(anchor)) return "reCAPTCHA resuelto.";
   }
   return "No se pudo resolver el reCAPTCHA (Google siguió pidiendo desafíos o caducó).";
+}
+
+// Resolución por servicio (2Captcha): se le manda la clave del sitio y la URL, y devuelve el token que Google habría
+// puesto en el formulario. Desde un servidor, nuestro resolvedor con Gemini nunca convenció a Google (1016: hasta 7
+// rondas sin aceptar), así que si hay clave del servicio se usa esta vía.
+const SERVICE_URL = "https://api.2captcha.com";
+const SERVICE_DEADLINE_MS = 150_000;
+
+async function solveWithService(page: Page, anchor: Frame, clientKey: string, log: (m: string) => void): Promise<string> {
+  const siteKey = new URL(anchor.url()).searchParams.get("k");
+  if (!siteKey) return "No se encontró la clave del sitio del reCAPTCHA.";
+  log("Captcha: pidiendo la resolución a 2Captcha…");
+  const task = await serviceCall<{ taskId: number }>(clientKey, "createTask", {
+    task: { type: "RecaptchaV2TaskProxyless", websiteURL: page.url(), websiteKey: siteKey },
+  });
+
+  const start = Date.now();
+  while (Date.now() - start < SERVICE_DEADLINE_MS) {
+    await page.waitForTimeout(5_000);
+    const res = await serviceCall<{ status: string; solution?: { gRecaptchaResponse: string } }>(clientKey, "getTaskResult", { taskId: task.taskId });
+    if (res.status !== "ready" || !res.solution) continue;
+    await injectToken(page, res.solution.gRecaptchaResponse);
+    await page.waitForTimeout(1_000);
+    return "reCAPTCHA resuelto (token puesto en el formulario; la casilla puede no verse marcada). Envía el formulario.";
+  }
+  return "2Captcha no entregó la respuesta a tiempo.";
+}
+
+async function serviceCall<T>(clientKey: string, method: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${SERVICE_URL}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clientKey, ...body }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`2Captcha respondió ${res.status}`);
+  const data = (await res.json()) as T & { errorId: number; errorCode?: string; errorDescription?: string };
+  if (data.errorId) throw new Error(`2Captcha: ${data.errorCode ?? data.errorId}${data.errorDescription ? ` (${data.errorDescription})` : ""}`);
+  return data;
+}
+
+// Deja el token donde lo deja Google (textarea g-recaptcha-response) y, si el sitio registró un callback, lo llama.
+function injectToken(page: Page, token: string) {
+  return page.evaluate((tok) => {
+    document.querySelectorAll<HTMLTextAreaElement>('textarea[name="g-recaptcha-response"], #g-recaptcha-response').forEach((t) => {
+      t.value = tok;
+      t.innerHTML = tok;
+    });
+    const named = document.querySelector(".g-recaptcha[data-callback]")?.getAttribute("data-callback");
+    const w = window as unknown as Record<string, unknown>;
+    if (named && typeof w[named] === "function") (w[named] as (t: string) => void)(tok);
+    const cfg = w.___grecaptcha_cfg as { clients?: Record<string, unknown> } | undefined;
+    const seen = new Set<unknown>();
+    const find = (o: unknown, depth: number): ((t: string) => void) | null => {
+      if (!o || typeof o !== "object" || seen.has(o) || depth > 6) return null;
+      seen.add(o);
+      try {
+        for (const v of Object.values(o as Record<string, unknown>)) {
+          if (typeof v === "function" && (o as Record<string, unknown>).callback === v) return v as (t: string) => void;
+          const r = find(v, depth + 1);
+          if (r) return r;
+        }
+      } catch {
+        // objetos de otro origen (marcos de Google) no se pueden recorrer
+      }
+      return null;
+    };
+    for (const client of Object.values(cfg?.clients ?? {})) {
+      const cb = find(client, 0);
+      if (cb) {
+        cb(tok);
+        break;
+      }
+    }
+  }, token);
 }
 
 async function waitForFrame(page: Page, needles: string[], ms: number): Promise<Frame | null> {
