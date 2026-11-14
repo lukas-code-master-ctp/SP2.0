@@ -14,6 +14,11 @@ describe("summarize", () => {
       "El emisor no tiene registro para ese RUN (por ejemplo, sin matrimonio inscrito).",
     );
   });
+  it("resume el resultado del aseo aunque mencione el captcha", () => {
+    expect(summarize(`Consulté el portal con el RUT del propietario. El reCAPTCHA se resolvió y el sitio respondió "RUT NO REGISTRA DEUDA PENDIENTE" (total a pagar $0). ${"Detalle. ".repeat(6)}`)).toBe(
+      "No registra deuda.",
+    );
+  });
   it("resume captchas", () => {
     expect(summarize(`Agente: El sitio del Registro Civil muestra un captcha de imagen ("¿Cuál es el código?") que no se pudo resolver. ${"Pasos para una persona. ".repeat(6)}`)).toBe(
       "El sitio pide un captcha; lo completa nuestro equipo.",
