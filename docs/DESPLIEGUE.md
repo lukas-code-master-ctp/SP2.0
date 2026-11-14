@@ -65,6 +65,7 @@ COMPANY_EMAIL: "documentos@smartprop.io"
 COMPANY_REP_NAME: "..."           # representante: sitios que rechazan el RUT de empresa (SERVIU)
 COMPANY_REP_RUN: "..."
 COMPANY_REP_DOC: "..."           # número de documento (serie) de su cédula (Registro Civil)
+TWOCAPTCHA_API_KEY: "..."        # 2captcha.com: resuelve el reCAPTCHA del aseo de Las Condes
 WORKER_CONCURRENCY: "3"
 ```
 
