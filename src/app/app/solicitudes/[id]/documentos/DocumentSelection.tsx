@@ -2,22 +2,25 @@
 
 import { useActionState, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Check, Landmark, Sparkles } from "lucide-react";
+import { ArrowRight, Ban, Check, Landmark, Sparkles } from "lucide-react";
 import { checkout } from "@/app/actions/requests";
 import { FormError, SubmitButton, cx } from "@/components/ui";
 import { formatCLP } from "@/lib/money";
 import { computeTotals } from "@/lib/requirements";
 
-type Item = { id: string; name: string; description: string; issuer: string; price: number; selected: boolean };
+/** `blocked`: motivo por el que no se puede obtener en línea en esta comuna (null si se puede). */
+type Item = { id: string; name: string; description: string; issuer: string; price: number; selected: boolean; blocked: string | null };
 type Props = { requestId: string; items: Item[]; report: { name: string; price: number; included: boolean } };
 
 export function DocumentSelection({ requestId, items, report }: Props) {
   const [state, action] = useActionState(checkout, undefined);
-  const [selected, setSelected] = useState(() => new Set(items.filter((i) => i.selected).map((i) => i.id)));
+  const available = items.filter((i) => !i.blocked);
+  const blocked = items.filter((i) => i.blocked);
+  const [selected, setSelected] = useState(() => new Set(available.filter((i) => i.selected).map((i) => i.id)));
   const [includeReport, setIncludeReport] = useState(report.included);
 
   const totals = computeTotals(
-    items.map((i) => ({ price: i.price, selected: selected.has(i.id) })),
+    available.map((i) => ({ price: i.price, selected: selected.has(i.id) })),
     includeReport,
     report.price,
   );
@@ -28,7 +31,7 @@ export function DocumentSelection({ requestId, items, report }: Props) {
       else next.add(id);
       return next;
     });
-  const allSelected = selected.size === items.length;
+  const allSelected = selected.size === available.length;
 
   return (
     <form action={action} className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">
@@ -38,18 +41,20 @@ export function DocumentSelection({ requestId, items, report }: Props) {
         <div className="card overflow-hidden p-0">
           <div className="flex items-center justify-between border-b border-cloud px-5 py-3 sm:px-6">
             <p className="text-sm tabular-nums text-slate-600">
-              {selected.size} de {items.length} documentos seleccionados
+              {selected.size} de {available.length} documentos seleccionados
             </p>
-            <button
-              type="button"
-              className="btn-ghost -mr-3 text-brand-500"
-              onClick={() => setSelected(allSelected ? new Set() : new Set(items.map((i) => i.id)))}
-            >
-              {allSelected ? "Desmarcar todos" : "Marcar todos"}
-            </button>
+            {available.length > 0 && (
+              <button
+                type="button"
+                className="btn-ghost -mr-3 text-brand-500"
+                onClick={() => setSelected(allSelected ? new Set() : new Set(available.map((i) => i.id)))}
+              >
+                {allSelected ? "Desmarcar todos" : "Marcar todos"}
+              </button>
+            )}
           </div>
           <ul className="divide-y divide-cloud">
-            {items.map((i) => {
+            {available.map((i) => {
               const on = selected.has(i.id);
               return (
                 <li key={i.id}>
@@ -78,6 +83,30 @@ export function DocumentSelection({ requestId, items, report }: Props) {
               );
             })}
           </ul>
+          {blocked.length > 0 && (
+            <>
+              <p className="border-y border-cloud bg-mist px-5 py-3 text-sm text-slate-600 sm:px-6">
+                No disponibles en línea en esta comuna ({blocked.length}). No se pueden pedir por ahora.
+              </p>
+              <ul className="divide-y divide-cloud">
+                {blocked.map((i) => (
+                  <li key={i.id} className="flex items-start gap-4 px-5 py-4 opacity-70 sm:px-6">
+                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 border-slate-200 bg-slate-100 text-slate-400" aria-hidden>
+                      <Ban className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-slate-600">{i.name}</span>
+                      <span className="block text-sm text-slate-500">{i.blocked}</span>
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-slate-500">
+                        <Landmark className="h-3.5 w-3.5" aria-hidden /> {i.issuer}
+                      </span>
+                    </span>
+                    <span className="whitespace-nowrap text-xs font-medium text-slate-500">No disponible</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
 
         <label

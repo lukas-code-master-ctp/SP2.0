@@ -11,6 +11,8 @@ import { normalizeName } from "./sii-avaluo";
 // página en blanco. Antes mostraba la lista y el PDF se abría desde "Listar Certificados"; se deja como respaldo.
 // El sitio tarda 30 a 60 s en cada paso: el agente se cortaba antes y repetía la solicitud sin descargarla.
 const FORM = "https://cne.minvu.cl/Public/IngresarSolicitud.aspx";
+// Comunas que el SERVIU escribe distinto que nuestro catálogo.
+const SERVIU_NOMBRES: Record<string, string> = { "LA CALERA": "CALERA", MARCHIGUE: "MARCHIHUE" };
 const SLOW_MS = 180_000;
 
 export const serviuNoExpropiacion: Connector = {
@@ -59,7 +61,7 @@ export const serviuNoExpropiacion: Connector = {
       // Los valores del selector de región son el número oficial de la región, igual que Region.id.
       // Elegirla recarga la página con las comunas de esa región.
       await page.selectOption("#cbRegion_cmbValor", String(property.regionId));
-      const target = normalizeName(property.comuna);
+      const target = SERVIU_NOMBRES[normalizeName(property.comuna)] ?? normalizeName(property.comuna);
       let comuna: string | undefined;
       for (let i = 0; i < 30 && !comuna; i++) {
         await page.waitForTimeout(2_000);
