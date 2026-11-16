@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getOwnedRequest } from "@/lib/requests";
 import { Steps } from "@/components/Steps";
+import { bloqueado, disponibilidad } from "@/lib/disponibilidad";
 import { DocumentSelection } from "./DocumentSelection";
 
 export default async function DocumentsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,14 +20,18 @@ export default async function DocumentsPage({ params }: { params: Promise<{ id: 
       </p>
       <DocumentSelection
         requestId={request.id}
-        items={request.items.map((i) => ({
-          id: i.id,
-          name: i.documentType.name,
-          description: i.documentType.description,
-          issuer: i.documentType.issuer,
-          price: i.price,
-          selected: i.selected,
-        }))}
+        items={request.items.map((i) => {
+          const d = disponibilidad(i.documentType.code, request.comuna.name);
+          return {
+            id: i.id,
+            name: i.documentType.name,
+            description: i.documentType.description,
+            issuer: i.documentType.issuer,
+            price: i.price,
+            selected: i.selected,
+            blocked: bloqueado(d) ? d.motivo : null,
+          };
+        })}
         report={{ name: request.procedure.reportName, price: request.procedure.reportPrice, included: request.includeReport }}
       />
     </>

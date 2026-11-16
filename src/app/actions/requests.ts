@@ -8,6 +8,7 @@ import { requireOnboardedUser } from "@/lib/auth";
 import { normalizeRol } from "@/lib/rol";
 import { formatRut, isValidRut } from "@/lib/rut";
 import { computeTotals, resolveRequirements } from "@/lib/requirements";
+import { bloqueado, disponibilidad } from "@/lib/disponibilidad";
 import { getOwnedRequest, markRequestPaid, withRequestNumber } from "@/lib/requests";
 import { getPaymentProvider } from "@/lib/payments";
 import type { FormState } from "./auth";
@@ -70,12 +71,13 @@ export async function createRequest(_: FormState, formData: FormData): Promise<F
   const activeRows = procedure.requirements.filter((r) => r.documentType.active);
   const docIds = resolveRequirements(activeRows, regionId, comunaId);
   if (docIds.length === 0) return { error: "No hay documentos configurados para este trámite en esa comuna." };
-  const priceById = new Map(activeRows.map((r) => [r.documentTypeId, r.documentType.price]));
+  const docById = new Map(activeRows.map((r) => [r.documentTypeId, r.documentType]));
 
+  // Los documentos que no se pueden obtener por internet en esta comuna quedan en la lista, pero bloqueados.
   const items = docIds.map((id, sortOrder) => ({
     documentTypeId: id,
-    price: priceById.get(id) ?? 0,
-    selected: true,
+    price: docById.get(id)?.price ?? 0,
+    selected: !bloqueado(disponibilidad(docById.get(id)?.code ?? "", comuna.name)),
     sortOrder,
   }));
   const totals = computeTotals(items, false, procedure.reportPrice);
@@ -113,6 +115,11 @@ export async function checkout(_: FormState, formData: FormData): Promise<FormSt
 
   const selectedIds = new Set(formData.getAll("documents").map(String));
   const includeReport = formData.get("includeReport") === "on";
+  const blocked = request.items.filter((i) => bloqueado(disponibilidad(i.documentType.code, request.comuna.name)));
+  const blockedSelected = blocked.find((i) => selectedIds.has(i.id));
+  if (blockedSelected) {
+    return { error: `"${blockedSelected.documentType.name}" no se puede obtener en línea en ${request.comuna.name}. Quítalo para continuar.` };
+  }
   const items = request.items.map((i) => ({ id: i.id, price: i.price, selected: selectedIds.has(i.id) }));
   if (!items.some((i) => i.selected) && !includeReport) {
     return { error: "Selecciona al menos un documento." };
