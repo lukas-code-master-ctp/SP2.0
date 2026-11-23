@@ -118,7 +118,7 @@ export async function checkout(_: FormState, formData: FormData): Promise<FormSt
   const blocked = request.items.filter((i) => bloqueado(disponibilidad(i.documentType.code, request.comuna.name)));
   const blockedSelected = blocked.find((i) => selectedIds.has(i.id));
   if (blockedSelected) {
-    return { error: `"${blockedSelected.documentType.name}" no se puede obtener en línea en ${request.comuna.name}. Quítalo para continuar.` };
+    return { error: `"${blockedSelected.documentType.name}" no se puede obtener a distancia en ${request.comuna.name}. Quítalo para continuar.` };
   }
   const items = request.items.map((i) => ({ id: i.id, price: i.price, selected: selectedIds.has(i.id) }));
   if (!items.some((i) => i.selected) && !includeReport) {

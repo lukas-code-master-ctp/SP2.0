@@ -86,7 +86,7 @@ export function DocumentSelection({ requestId, items, report }: Props) {
           {blocked.length > 0 && (
             <>
               <p className="border-y border-cloud bg-mist px-5 py-3 text-sm text-slate-600 sm:px-6">
-                No disponibles en línea en esta comuna ({blocked.length}). No se pueden pedir por ahora.
+                No se pueden obtener a distancia en esta comuna ({blocked.length}). No se pueden pedir por ahora.
               </p>
               <ul className="divide-y divide-cloud">
                 {blocked.map((i) => (
